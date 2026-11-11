@@ -92,7 +92,8 @@ await page.click('#aiSites [data-site="gemini"]');
 await page.waitForFunction(async () => (await navigator.clipboard.readText()).startsWith('Turn the study material'));
 ok(true, 'the site buttons copy the prompt');
 // back with the answer
-await page.click('#aiBack');
+await page.evaluate(() => { Object.defineProperty(navigator.clipboard, 'readText', { configurable: true, value: () => Promise.reject(new Error('denied')) }); });
+await page.click('#aiBack'); await page.evaluate(() => { delete navigator.clipboard.readText; });
 ok(await page.isVisible('#pasteBox') && await page.isVisible('#aiNote'), 'back to the paste box with a note about the answer');
 await page.fill('#pasteBox', 'Interphase | The phase before mitosis. Source: "Interphase comes before mitosis"\nAllele | A version of a gene. Source: "An allele is a version of a gene"');
 await page.waitForSelector('#preview:not([hidden])');
@@ -167,7 +168,8 @@ ok(JSON.stringify(await page.evaluate(async () => (await (await import('./js/db.
 
 await openFile();
 await page.setInputFiles('#fileIn', SP + '/files/doc-slides.pptx'); await ready();
-await page.click('#docAi'); await page.click('#aiBack');
+await page.click('#docAi'); await page.evaluate(() => { Object.defineProperty(navigator.clipboard, 'readText', { configurable: true, value: () => Promise.reject(new Error('denied')) }); });
+await page.click('#aiBack'); await page.evaluate(() => { delete navigator.clipboard.readText; });
 await page.fill('#pasteBox', 'Front,Back,Tags\nCell,Unit of life,bio week1\nAtom,Unit of matter,');
 await page.waitForSelector('#preview:not([hidden])');
 await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Merged'); await page.click('#saveBtn'); await page.waitForSelector('.crow');

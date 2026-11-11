@@ -230,7 +230,7 @@ export async function renderPlay(el) {
 
       <div class="start-row">
         <button class="btn primary" type="button" id="startBtn">Start round</button>
-        ${best ? `<span class="mode-best">Best for this setup <b class="mono">${best.toLocaleString()}</b></span>` : ''}
+        ${best ? `<span class="mode-best">Best <b class="mono">${best.toLocaleString()}</b></span>` : ''}
         ${helpLink('play-scoring', '?', 'How scoring works in Play')}
       </div>
       `}`;
@@ -731,7 +731,7 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
   // (The box must still be on the page too: Play may have been left and opened again, which draws into a new box.)
   if (!el.isConnected || !location.hash.startsWith('#/play')) return;
   const line = round.fmt === 'survival' ? `Survived ${plural(total, 'question')}.`
-    : round.fmt === 'lightning' ? `${plural(correct, 'right answer')} in 60 seconds.` : '';
+    : round.fmt === 'lightning' ? `${correct} right in 60s` : '';
 
   const strong = 'SAB'.includes(letter);          // the big stamp is for S, A and B; a C or D gets a quiet one
   const gradeText = isBest ? `Grade ${letter}` : label;
@@ -760,7 +760,7 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
         <p class="res-grade">${gradeText} · ${round.drill ? 'Drill' : FORMATS[round.fmt]}${round.hard ? ' (Hard)' : ''}${round.flash ? ` · Flash ${round.flash / 1000}s` : ''} · ${esc(deckName)}</p>
         <p class="res-score mono"><span class="res-n">${round.score.toLocaleString()}</span> <small>pts</small></p>
         ${line ? `<p class="res-line">${line}</p>` : ''}
-        ${isBest ? `<p class="newbest">${firstScore ? 'First score for this setup' : 'New best for this setup'}</p>` : ''}
+        ${isBest ? `<p class="newbest">${firstScore ? 'First score' : 'New best'}</p>` : ''}
       </div>
     </div>
     <div class="stats4">
@@ -772,6 +772,9 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
     <div class="res-actions">
       <button class="btn primary" id="againBtn" type="button">Play again</button>
       ${missed.length ? '<button class="btn ghost" id="drillBtn" type="button">Drill missed</button>' : ''}
+    </div>
+    <button class="fold-toggle res-more-toggle" type="button" id="playMoreBtn" aria-expanded="false" aria-controls="playMore"><span>More</span>${icon('chevron')}</button>
+    <div id="playMore" class="more-opts res-more" hidden>
       <button class="btn ghost" id="menuBtn" type="button">Change setup</button>
     </div>
     ${schedule}
@@ -780,7 +783,7 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
       <h2>Missed</h2>
       ${listed.length ? listed.map((l, i) => i < open ? missedRow(l) : `<div class="miss-extra" hidden>${missedRow(l)}</div>`).join('')
         + (listed.length > open ? `<button class="btn ghost" id="showAllMiss" type="button">Show all ${listed.length}</button>` : '')
-      : `<p class="muted">${total ? 'Clean round. Nothing to review.' : 'No answers this round.'}</p>`}
+      : `<p class="muted">${total ? 'Clean round' : 'No answers this round.'}</p>`}
     </section>`;
   $('showAllMiss')?.addEventListener('click', e => {
     ctx.all = true;
@@ -811,6 +814,12 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
   $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill } : base));
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
+  $('playMoreBtn').addEventListener('click', e => {
+    e.stopPropagation();                  // (the Add card sheet's "More options" handler listens on the document for ids ending in MoreBtn)
+    const open = e.currentTarget.getAttribute('aria-expanded') !== 'true';
+    e.currentTarget.setAttribute('aria-expanded', String(open));
+    $('playMore').hidden = !open;
+  });
   if (!again) { $('againBtn').focus({ preventScroll: true }); fx.result(el); }
 }
 

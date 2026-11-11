@@ -161,7 +161,7 @@ function calendarHTML(cal, now) {
   return `
     <section class="card section cal-card" aria-labelledby="calTitle">
       <div class="mhead"><h2 id="calTitle">Study calendar</h2>
-        <span class="muted small">Studied ${plural(cal.daysStudied, 'day')} in the past year · best streak ${plural(cal.longest, 'day')}</span></div>
+        <span class="muted small">${plural(cal.daysStudied, 'day')} in the past year · best streak ${plural(cal.longest, 'day')}</span></div>
       <div class="cal" role="img" aria-label="${esc(`Studied on ${cal.daysStudied} of the last ${cal.daysShown} days, ${plural(cal.answers, 'answer')} in all. Longest streak ${plural(cal.longest, 'day')}.${cal.weeks.some(w => w.some(d => d.frozen)) ? ' Days covered by a streak freeze have a diagonal hatch.' : ''}`)}">
         <span class="cal-wd" aria-hidden="true"><b></b><b>Mon</b><b></b><b>Wed</b><b></b><b>Fri</b><b></b><b></b></span>
         <div class="cal-scroll" id="calScroll">
@@ -338,7 +338,7 @@ export async function renderStats(el) {
         <div class="ready-row"><h2 id="readyTitle">${exam ? 'Exam readiness' : 'Readiness today'}</h2>${exam ? `<span class="${badgeClass(exam)}">${esc(countdown(exam))}</span>` : ''}</div>
         <p class="ready-line"><b>${seen}</b>/${cards.length} seen · <b>${counts.mature}</b> mature</p>
         <div class="mbar" aria-hidden="true"><span class="lv-mature" style="width:${share('mature')}"></span><span class="lv-young" style="width:${share('young')}"></span><span class="lv-learning" style="width:${share('learning')}"></span></div>
-        <details class="fine ready-fine"><summary>How sure is this?</summary><p>${exam ? 'Cards you would still remember (90% or better) on exam day if you stopped reviewing now.' : 'Cards you remember right now (90% or better).'} ${esc(readyEstimateText(cleanFsrsParams(settings.fsrsParams)))}</p></details>
+        <details class="fine ready-fine"><summary>How sure is this?</summary><p>${esc(readyEstimateText(cleanFsrsParams(settings.fsrsParams)))}</p></details>
         <div class="ready-acts">
           ${exam ? '<button class="btn primary small" type="button" id="readyPrep">' + icon('target') + ' Exam prep</button>' : '<button class="btn primary small" type="button" id="readyExam">' + icon('calendar') + ' Add exam date</button>'}
           <button class="btn ghost small" type="button" id="readyTest">Practice test</button>
@@ -377,7 +377,7 @@ export async function renderStats(el) {
       <div class="card pc-ret">
         <h2>Retention</h2>
         <div class="big">${D.ret.rate === null ? '–' : Math.round(D.ret.rate * 100)}<small>${D.ret.rate === null ? '' : '%'}</small></div>
-        <p>${D.ret.total ? `You remembered ${D.ret.remembered} of ${plural(D.ret.total, 'due review')} in the last 30 days.` : 'Nothing due in the last 30 days yet.'}</p>
+        <p>${D.ret.total ? `${D.ret.remembered} of ${D.ret.total} remembered · 30 days` : 'Nothing due in the last 30 days yet.'}</p>
       </div>`,
     rs: () => `
     <section class="card section rs-card" aria-labelledby="rsTitle">
@@ -444,7 +444,7 @@ export async function renderStats(el) {
       })}
       ${(() => {
         const best = D.hours.filter(h => h.total >= 10).sort((a, b) => b.right / b.total - a.right / a.total)[0];
-        return best ? `<p class="note">You remember most around <b>${hourName(best.hour)}</b> (${Math.round(best.right / best.total * 100)}% right).</p>` : '';
+        return best ? `<p class="note">Best hour: <b>${hourName(best.hour)}</b> (${Math.round(best.right / best.total * 100)}%).</p>` : '';
       })()}
     </section>`,
     difficulty: () => `

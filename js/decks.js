@@ -311,7 +311,7 @@ export async function renderDeck(el, deckId) {
   await mountBrowser($('browser'), { deckId, data: today, onChange: () => refreshCounts(el, deckId) });
 }
 
-// "Daily limits are shared, so the subdecks can add up to more than Course's 20 due." (or '' when they don't).
+// "Shared limit: 20 due today" (or '' when they don't).
 // The subdecks are counted one by one, each against the same shared limits, so they can add up to more than the parent shows.
 // With no limits at all that can't happen, and if it does the numbers are wrong: say so in the console (dev builds).
 function sharedLimitNote(today, deck, kids, depth, counts) {
@@ -321,7 +321,7 @@ function sharedLimitNote(today, deck, kids, depth, counts) {
   // Only a review limit can make the subdecks' due add up to more than the deck (newPerDay is always set, so it says nothing).
   if (!hasReviewLimit(today) && (sumDue > counts.due) && /^(localhost|127\.)/.test(location.hostname)) console.warn(`Deck counts: the subdecks of "${deck.name}" add up to more than the deck`, { sumDue, sumNew, counts });
   const [n, word] = sumDue > counts.due ? [counts.due, 'due'] : sumNew > counts.fresh ? [counts.fresh, 'new'] : [0, ''];
-  return word ? `Daily limits are shared, so the subdecks can add up to more than ${deck.name}'s ${n} ${word}.` : '';
+  return word ? `Shared limit: ${n} ${word} today` : '';
 }
 
 // The ⋯ menu in a deck page's header: Edit, Add subdeck and Export. Opens under the button; Esc, a click outside or
@@ -411,7 +411,7 @@ function summaryHTML(s, c) {
         <span><b>${s.total.toLocaleString('en')}</b> ${s.total === 1 ? 'card' : 'cards'}</span>
         ${s.hidden ? `<span><b>${s.hidden.toLocaleString('en')}</b> suspended or buried</span>` : ''}
       </div>
-      ${held > 0 ? `<p class="held-note">${held.toLocaleString('en')} wait${held === 1 ? 's' : ''} until tomorrow <span>(${why})</span></p>` : ''}
+      ${held > 0 ? `<p class="held-note">${held.toLocaleString('en')} held to tomorrow <span>(${why})</span></p>` : ''}
       ${c.heldNewByRescue > 0 ? '<p class="held-note">New cards paused <span>(catch-up plan)</span></p>' : ''}
       <div style="margin-top:10px">${masteryBar(s)}</div>
       <div class="legend">

@@ -8,7 +8,7 @@
 //   q   the question, plain text.
 //   a   the answer as HTML written here, never from user data. Use helpLink() to point at another answer.
 // Link to an answer from a screen with <a href="#/help/<id>">.
-import { esc } from './ui.js';
+import { esc, icon } from './ui.js';
 import { contactHTML } from './legal.js';
 
 const code = s => `<code>${s}</code>`;
@@ -63,7 +63,7 @@ export const SECTIONS = [
     { id: 'accuracy', q: 'What does Accuracy mean on the finish screen?', a: `
       <p>Accuracy counts every rating except <b>Again</b>. Hard, Good and Easy all count as remembered.</p>` },
     { id: 'exam-date', q: 'What does an exam date change?', a: `
-      <p>Add one with <b>Add exam date</b> (Today, a deck’s page, or <b>Edit deck</b> → Exam date). Until then, every card in that deck and its subdecks is scheduled to come back before the exam, reviews get a bit stricter in the last two weeks, and <b>Exam prep</b> goes over what you haven’t seen lately. Clear the date to turn this off.</p>
+      <p>Add one with <b>Add exam date</b> (Today, a deck’s page, or <b>Edit deck</b> → Exam date). Until then, every card in that deck and its subdecks is scheduled to come back before the exam, reviews get a bit stricter in the last two weeks, and <b>Exam prep</b> goes over what you haven’t seen lately. Clear the date to turn this off. If Today shows more than 60 new cards a day to be ready in time, starting sooner makes each day lighter.</p>
       <p>A subdeck with no date of its own uses its parent’s. Set a date in its Edit deck to give it its own.</p>` },
     { id: 'shortcuts', q: 'What are the single-key shortcuts? How do I turn them off?', a: `
       <p>In Review, Play and the card sheet, single keys act on a card: E, I, R, D, Z, A, X, M, -, @ and 1 to 6. Space and Enter always work on the focused card.</p>
@@ -81,15 +81,20 @@ export const SECTIONS = [
     { id: 'reverse', q: 'What is a reverse card?', a: `
       <p>A reverse card asks the back and expects the front, with its own schedule, so you can know a term but not its definition. Turn on <b>Both directions</b> when you add or edit a card: it also asks the back and expects the front, each direction has its own schedule, and Review shows one of the two a day. In Browse a pair shows “Has a reverse card” with <b>Open the other direction</b>. Cloze, image-occlusion, step-by-step and elements cards can’t have one. You find it under <b>More options</b> when you add or edit a card.</p>` },
     { id: 'anki-import', q: 'What happens to my Anki deck when I import it?', a: `
-      <p>Subdecks stay subdecks (“Psych 101::Unit 1” becomes a subdeck inside the deck you add them to); turn that off and everything goes in one deck. Anki notes with more than two fields keep the extras while <b>Keep the other fields</b> is on. Importing the same deck again updates the cards you already have. Cards you may have edited here are left alone unless you turn on <b>Overwrite … you may have edited here too</b>. Each of those rows says “Kept as you edited it”, or “Overwrites your edits” when that switch is on.</p>` },
+      <p>Subdecks stay subdecks (“Psych 101::Unit 1” becomes a subdeck inside the deck you add them to); turn that off and everything goes in one deck. Anki notes with more than two fields keep the extras while <b>Keep the other fields</b> is on. Importing the same deck again updates the cards you already have. Cards you may have edited here are left alone unless you turn on <b>Overwrite … you may have edited here too</b>. Each of those rows says “Kept as you edited it”, or “Overwrites your edits” when that switch is on.</p>
+      <p>Sounds stay on this device, sync like pictures and are kept in backups. A big deck (over 200 MB of pictures and sounds, or more than 50,000 reviews of history) is slow on a phone, fills your account space and makes the first sync on a new device slower. The import warns you; turn off <b>Bring sounds</b> or <b>Bring over my Anki progress</b> to leave them out.</p>` },
     { id: 'typing', q: 'Can I type my answers instead of flipping?', a: `
       <p>Yes, and the app shows which letters were wrong. For one session: Today → <b>Options</b> → Answer by → <b>Typing the answer</b> (answers of 40 characters or less). To keep it: open a card and set <b>Answer by</b> to Typing the answer, select several cards in Browse and choose <b>Answer by…</b>, or turn on <b>Type the answers</b> in a deck’s Edit deck sheet (it applies to that deck and its subdecks, and <b>Answer by</b> in a card’s editor sets one card differently). Anki cards with a “type in the answer” box come in as typing cards. Cloze, image-occlusion and elements cards always just flip: they have no typing box.</p>` },
     { id: 'cloze', q: 'How do I write cloze (fill in the blank) cards?', a: `
       <p>In the card editor, select the words to hide and tap <b>New blank</b>. Each blank becomes its own card. <b>Same blank as the last one</b> hides another word on that same card. To show a hint instead of […], type two colons and the hint inside the blank, after the answer. The preview under the box says how many cards you will get.</p>` },
     { id: 'maths', q: 'How do I write maths on a card?', a: `
       <p>Put it between $ signs, like ${code('$x^2$')}. It works on the front, the back and inside blanks, and a preview shows how it will look.</p>` },
+    { id: 'sheets', q: 'How do I import a Google Sheet?', a: `
+      <p>On the Add cards screen, open the <b>Google Sheets</b> tab. In Google Sheets, tap <b>Share</b> and set it to <b>Anyone with the link</b> (or use File → Share → Publish to web). Copy the link, paste it into the box and tap <b>Load</b>.</p>
+      <p>Column <b>A</b> becomes the front and column <b>B</b> the back; you can change that in the preview. A first row that says Front and Back is skipped. If the sheet has several tabs, the one open when you copied the link is loaded. A private sheet can’t be read: you’ll see “Couldn’t load that sheet”. Loading needs internet.</p>` },
     { id: 'subdecks', q: 'Why do a deck’s numbers include its subdecks?', a: `
-      <p>A deck’s counts, such as the numbers on its tile and on its <b>Subdecks</b> list, include the cards in its subdecks, so a course shows its whole workload. Open the course and look under <b>Subdecks</b> to see each part on its own. Study from the course to cover all of them, or from a subdeck to study just that part.</p>` },
+      <p>A deck’s counts, such as the numbers on its tile and on its <b>Subdecks</b> list, include the cards in its subdecks, so a course shows its whole workload. Open the course and look under <b>Subdecks</b> to see each part on its own. Study from the course to cover all of them, or from a subdeck to study just that part.</p>
+      <p>Daily limits are shared, so a course’s subdecks can add up to more than the course shows as due or new today. Each subdeck is counted on its own against the same limits. A note on the course’s page says so with the shared limit.</p>` },
     { id: 'deck-options', q: 'What do the options in Edit deck do?', a: `
       <p><b>New cards per day</b> and <b>Reviews per day</b> left blank (shown as “Overall”) use only the limits in Settings, which still cap the total across all decks. <b>Use my overall settings</b> takes retention, steps and maximum interval from Settings; a subdeck uses the deck it’s inside.</p>` },
     { id: 'read-aloud', q: 'How do I get cards read aloud or sounds played automatically?', a: `
@@ -175,7 +180,7 @@ export const SECTIONS = [
     { id: 'streak-freeze', q: 'What is a streak freeze?', a: `
       <p>One streak freeze a week covers a missed day. It keeps your streak but doesn’t add to the count. Two missed days in a row still break it. To rest on purpose, tap <b>Plan a day off</b>: a planned day off never breaks your streak and doesn’t add to it. You can plan up to 14 days, starting tomorrow and up to 60 days ahead. Studying any deck keeps the streak going (on a course’s Stats, the streak still counts all decks). A snowflake next to the streak means a freeze was used; a freeze that is only ready shows nothing.</p>` },
     { id: 'readiness', q: 'What does Exam readiness mean?', a: `
-      <p>On Stats, pick a course. <b>Exam readiness</b> is the share of its cards you would still remember (90% or better) on exam day if you stopped reviewing now. Without an exam date it shows <b>Readiness today</b>, and <b>Add exam date</b> lets you set one. It’s an estimate: <b>How sure is this?</b> says what it’s based on. You can turn the header off with Exam readiness in Stats in Settings → Appearance.</p>` },
+      <p>On Stats, pick a course. <b>Exam readiness</b> is the share of its cards you would still remember (90% or better) on exam day if you stopped reviewing now. Without an exam date it shows <b>Readiness today</b>, the share of cards you remember right now (90% or better), and <b>Add exam date</b> lets you set one. It’s an estimate: <b>How sure is this?</b> says what it’s based on. You can turn the header off with Exam readiness in Stats in Settings → Appearance.</p>` },
     { id: 'retention-planner', q: 'How does Help me choose pick a retention?', a: `
       <p>Under Settings → Study → Target retention, <b>Help me choose</b> shows what each target would cost in reviews. It includes the exam’s own rules: the target rises over the last two weeks, and cards you would remember at under 99% on exam day get one more review in the final days, spread over those days.</p>` },
     { id: 'stats-layout', q: 'How do I change which Stats cards I see?', a: `
@@ -190,6 +195,8 @@ export function renderHelp(el, id) {
   el.innerHTML = `
     <a class="back" href="#/settings">‹ Settings</a>
     <div class="screen-head"><div><h1>Help</h1></div></div>
+    <div class="help-search"><label class="deck-search">${icon('search')}<input type="search" id="helpQ" placeholder="Search help" aria-label="Search help" autocomplete="off"></label></div>
+    <p class="note" id="helpNone" role="status" hidden>No answers match.</p>
     ${SECTIONS.map((s, i) => `
       <section class="section help-sec" aria-labelledby="helpH${i}">
         <h2 id="helpH${i}">${esc(s.title)}</h2>
@@ -197,6 +204,24 @@ export function renderHelp(el, id) {
       </section>`).join('')}
     <p class="note help-foot"><a href="#/welcome/again">Replay the welcome tour</a> · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></p>
     <p class="note">Contact: ${contactHTML()}</p>`;
+  // Search: hide answers that don't match (summary and answer text), hide empty sections, open the matches from 2 letters.
+  const qBox = el.querySelector('#helpQ'), none = el.querySelector('#helpNone');
+  let before = null;                 // which answers were open when the search started (the deep-linked one, say), put back when it ends
+  const filter = () => {
+    const q = qBox.value.trim().toLowerCase();
+    if (q && !before) before = new Set([...el.querySelectorAll('details.help-q[open]')].map(d => d.id));
+    let shown = 0;
+    for (const d of el.querySelectorAll('details.help-q')) {
+      const hit = !q || d.textContent.toLowerCase().includes(q);
+      d.hidden = !hit;
+      if (hit && q) shown++;
+      if (q.length >= 2) d.open = hit; else if (before) d.open = before.has(d.id);
+    }
+    if (!q) before = null;
+    for (const sec of el.querySelectorAll('.help-sec')) sec.hidden = !!q && !sec.querySelector('details.help-q:not([hidden])');
+    none.hidden = !q || shown > 0;
+  };
+  qBox.addEventListener('input', filter);
   const target = id && el.querySelector(`#h-${CSS.escape(id)}`);
   if (target) {
     target.open = true;

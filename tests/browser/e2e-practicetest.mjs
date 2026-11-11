@@ -155,7 +155,7 @@ ok((await page.textContent('.rv-counts')).match(/\d+/g).map(Number).reduce((a, b
 await page.goto(URL + '#/test/pt'); await page.waitForSelector('#tReview');
 
 // ---------- Retake ----------
-await page.click('#tRetake'); await page.waitForSelector('#tPrompt');
+await page.click('#tMoreBtn'); await page.click('#tRetake'); await page.waitForSelector('#tPrompt');
 let s = await state();
 ok(s.i === 0 && s.answers.every(a => a === null), 'Retake starts the same questions again with nothing answered');
 ok(JSON.stringify((await run()).questions.map(q => q.cardId)) === JSON.stringify(r.questions.map(q => q.cardId)), 'the same questions, in the same order');
@@ -202,7 +202,7 @@ await answerNow('right');
 await page.evaluate(() => { const r = JSON.parse(localStorage.getItem('study-sprint-test-run')); r.cfg.limit = 0.05; localStorage.setItem('study-sprint-test-run', JSON.stringify(r)); });
 await page.reload(); await page.waitForSelector('#tClock');
 await page.waitForSelector('#tReview', { timeout: 8000 });
-ok((await page.textContent('.res-head')).includes('Time ran out'), 'when time runs out the test is submitted and the results say so');
+ok((await page.textContent('.res-head')).includes('Time\'s up'), 'when time runs out the test is submitted and the results say so');
 ok((await page.textContent('.t-ring')).trim() === '10%', 'only the one answered question scored (1 of 10)');
 await page.screenshot({ path: SP + '/pt-timeup.png', fullPage: true });
 await page.click('#tDone2'); await page.waitForSelector('#testBtn');
@@ -251,7 +251,7 @@ await setPrefs({ kinds: ['mc'] });
 await startFromDeck('pt');
 await submitAll();
 const idBefore = (await run()).id;
-await page.click('#tSetup'); await page.waitForSelector('#ptForm');
+await page.click('#tMoreBtn'); await page.click('#tSetup'); await page.waitForSelector('#ptForm');
 await page.locator('.chip:has(input[name=count][value="20"])').click();
 await page.click('#ptStart'); await page.waitForSelector('#tPrompt');
 ok((await run()).id !== idBefore && (await run()).cfg.count === 20 && !(await state()).done, 'results > Change setup > Start draws the new test (it is saved and shown)');

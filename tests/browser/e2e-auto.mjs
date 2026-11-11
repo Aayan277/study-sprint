@@ -74,7 +74,7 @@ ok(/Schedule updated/.test(note1), 'results screen explains the schedule change'
 // Second round the same day: nothing already changed by Play changes again.
 const appliedFirst = new Set(logs.filter(l => l.applied).map(l => l.cardId));
 const before = await page.evaluate(async () => Object.fromEntries((await (await import('./js/db.js')).getAll('cardStates')).map(s => [s.cardId, s.due])));
-await page.click('#menuBtn'); await playRound();
+await page.click('#playMoreBtn'); await page.click('#menuBtn'); await playRound();
 const logs2 = (await page.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.source === 'play'))).slice(10);
 const after = await page.evaluate(async () => Object.fromEntries((await (await import('./js/db.js')).getAll('cardStates')).map(s => [s.cardId, s.due])));
 const twice = logs2.filter(l => appliedFirst.has(l.cardId));

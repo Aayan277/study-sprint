@@ -67,9 +67,9 @@ ok(/^150 overdue cards piled up\. Spread them over\s*2 days\s*3 days\s*\?$/.test
 ok(!/backlog/i.test(await p.textContent('.rescue-banner')), 'no jargon ("backlog") in the banner');
 ok(await p.locator('[data-rdays]').count() === 2, 'only 2 and 3 days are offered (the plan is capped at 3)');
 ok(await p.getAttribute('[data-rdays="3"]', 'aria-pressed') === 'true', '3 days is picked at first');
-ok(/About 50 overdue \+ 20 of your usual cards a day/.test(await p.textContent('#rbPre')), 'the preview for 3 days: ' + await p.textContent('#rbPre'));
+ok(/~50 overdue \+ 20 usual a day/.test(await p.textContent('#rbPre')), 'the preview for 3 days: ' + await p.textContent('#rbPre'));
 await p.click('[data-rdays="2"]');
-ok(/About 75 overdue/.test(await p.textContent('#rbPre')) && await p.getAttribute('[data-rdays="2"]', 'aria-pressed') === 'true', 'choosing 2 days updates the preview to 75');
+ok(/~75 overdue/.test(await p.textContent('#rbPre')) && await p.getAttribute('[data-rdays="2"]', 'aria-pressed') === 'true', 'choosing 2 days updates the preview to 75');
 ok(await startCount(p) === 180, 'before a plan Start shows everything: 150 + 10 due + 20 new = ' + await startCount(p));
 await p.screenshot({ path: SP + '/rescue-banner-1440-dark.png' });
 await p.click('[data-rdays="3"]');

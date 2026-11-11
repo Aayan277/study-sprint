@@ -920,3 +920,14 @@
 :root[data-ui="clinical"][data-theme="dark"] :is(.th-done .th-extra.btn,.stats-scope .pick-btn,#claudeBtn,.skin:not([aria-pressed="true"])){border-color:var(--control)}
 /* Mastery bar: "Young" has to be 3:1 against the track (it was 1.5:1), so it is a lighter step of the accent, and "Mature" the light accent above it */
 :root[data-ui="clinical"][data-theme="dark"]{--lv-young:color-mix(in srgb,var(--accent) 90%,white); --lv-mature:var(--accent-text)}
+/* 4.66 WP-A */
+:root[data-ui="clinical"] .res-more .btn{box-shadow:none}
+:root[data-ui="clinical"][data-theme="dark"] .res-more .btn{border-color:var(--control)}
+
+/* 4.66 WP-B */
+:root[data-ui="clinical"] .pane-actions .push-end{margin-inline-start:auto}
+:root[data-ui="clinical"] #claudeNote #pasteAnsBtn{display:flex;width:fit-content;margin-top:10px}
+:root[data-ui="clinical"] .paste-only .seg,
+:root[data-ui="clinical"] .paste-only #deckSection,
+:root[data-ui="clinical"] .paste-only #pane-paste .pane-actions{display:none}
+:root[data-ui="clinical"] .paste-only-more{display:block;margin:10px 0 0;min-height:44px;color:var(--accent-text)}

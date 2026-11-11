@@ -34,7 +34,7 @@ for (const [w, h] of [[375, 740], [1280, 800]]) {
   // every answer has a unique id and opens from its deep link
   const ids = await p.$$eval('details.help-q', els => els.map(e => e.id.slice(2)));
   ok(new Set(ids).size === ids.length, tag + 'every Help id is unique');
-  for (const id of ['cloze', 'maths', 'typing', 'steps', 'subdecks', 'deck-options', 'read-aloud', 'export', 'deck-ring', 'exam-date', 'adding', 'tags', 'play-scoring', 'stats-terms', 'stats-calendar', 'fit-check', 'stats-layout', 'device-only', 'shortcuts', 'accuracy', 'advanced', 'reminders', 'glossary', 'custom-study', 'review-counts', 'compare', 'tools', 'reverse', 'anki-import', 'health-check', 'optimize', 'streak-freeze', 'readiness', 'retention-planner'])
+  for (const id of ['cloze', 'maths', 'typing', 'steps', 'subdecks', 'deck-options', 'read-aloud', 'export', 'deck-ring', 'exam-date', 'adding', 'tags', 'play-scoring', 'stats-terms', 'stats-calendar', 'fit-check', 'stats-layout', 'device-only', 'shortcuts', 'accuracy', 'advanced', 'reminders', 'glossary', 'custom-study', 'review-counts', 'compare', 'tools', 'reverse', 'anki-import', 'health-check', 'optimize', 'streak-freeze', 'readiness', 'retention-planner', 'sheets'])
     ok(ids.includes(id), tag + `Help has "${id}"`);
   await p.goto(APP + '#/help/device-only'); await p.waitForSelector('#h-device-only[open]');
   ok(await p.locator('details.help-q[open]').count() === 1, tag + '#/help/device-only opens only that answer');
@@ -55,6 +55,39 @@ for (const [w, h] of [[375, 740], [1280, 800]]) {
   ok(p.url().endsWith('#/settings'), tag + 'the ‹ Settings link goes to Settings');
   await p.goto(APP + '#/help'); await p.waitForSelector('h1:has-text("Help")');
   ok(await p.locator('a[href="#/welcome/again"]').count() === 1 && await p.locator('.help-foot a[href="privacy.html"]').count() === 1, tag + 'footer: welcome tour, Privacy, Terms');
+  // the answers hold what the shortened screen lines used to say
+  const ans = async id => (await p.textContent('#h-' + id)).replace(/\s+/g, ' ');
+  ok(/Anyone with the link/.test(await ans('sheets')) && /column A|Column A/.test(await ans('sheets')) && /back/.test(await ans('sheets')), tag + 'sheets: Anyone with the link, column A front and B back');
+  ok(/Daily limits are shared/.test(await ans('subdecks')) && /sync/.test(await ans('anki-import')) && /backups/.test(await ans('anki-import')) && /60 new cards/.test(await ans('exam-date')) && /right now/.test(await ans('readiness')), tag + 'subdecks, anki-import, exam-date and readiness hold the sentences moved off the screens');
+  // search: type a word, only matching answers stay, sections without a match hide, the empty state says so
+  ok(await p.locator('#helpQ').getAttribute('aria-label') === 'Search help' && await p.locator('#helpQ').isVisible(), tag + 'Help has a labelled search box');
+  await p.fill('#helpQ', 'streak');
+  const shown = await p.locator('details.help-q:not([hidden])').count();
+  ok(shown >= 2 && shown < n, tag + `"streak" keeps only the matching answers (${shown} of ${n})`);
+  ok(await p.locator('details.help-q:not([hidden]):not([open])').count() === 0, tag + 'matches are open');
+  ok(await p.locator('#h-streak-freeze:not([hidden])').count() === 1, tag + 'the streak freeze answer matches');
+  await p.fill('#helpQ', 'sheet');
+  ok(await p.locator('#h-sheets:not([hidden])').count() === 1, tag + '"sheet" finds the Google Sheets answer');
+  await p.fill('#helpQ', 'zzzzqq');
+  ok(await p.locator('details.help-q:not([hidden])').count() === 0 && await p.locator('section.help-sec:not([hidden])').count() === 0, tag + 'no match hides every answer and section');
+  ok(await p.locator('#helpNone[role=status]').isVisible() && /No answers match/.test(await p.textContent('#helpNone')), tag + 'and says "No answers match"');
+  ok(await noHScroll(p), tag + 'search results have no sideways scroll');
+  await p.fill('#helpQ', '');
+  ok(await p.locator('details.help-q:not([hidden])').count() === n && !(await p.locator('#helpNone').isVisible()) && await p.locator('details.help-q[open]').count() === 0, tag + 'clearing the box shows all answers, closed');
+  await p.goto(APP + '#/help/ratings'); await p.waitForSelector('#h-ratings[open]');
+  ok((await p.inputValue('#helpQ')) === '', tag + 'a deep link opens with an empty search box');
+  // clearing the search puts back what was open before it (the deep-linked answer, and one opened by hand)
+  const openIds = () => p.$$eval('details.help-q[open]', els => els.map(e => e.id).sort().join());
+  await p.click('#h-cloze > summary');
+  const was = await openIds();
+  ok(was === ['h-cloze', 'h-ratings'].join(), tag + 'two answers open before searching: ' + was);
+  await p.fill('#helpQ', 'streak');
+  ok((await openIds()) !== was, tag + 'searching opens the matches instead');
+  await p.fill('#helpQ', 's');
+  ok((await openIds()) === was, tag + 'one letter: the search opens nothing and the earlier answers are back: ' + await openIds());
+  await p.fill('#helpQ', 'streak');
+  await p.fill('#helpQ', '');
+  ok((await openIds()) === was && await p.locator('details.help-q:not([hidden])').count() === n, tag + 'clearing the box restores the open answers and shows all');
   await p.context().close();
 }
 
@@ -65,6 +98,8 @@ for (const [ui, mode] of [['original', 'light'], ['clinical', 'dark']]) {
   await p.goto(APP + '#/help'); await p.waitForSelector('h1:has-text("Help")');
   await p.$$eval('details.help-q', els => els.forEach(e => { e.open = true; }));
   ok(await noHScroll(p), `320px ${ui} ${mode}: no sideways scroll with every answer open`);
+  const sb = await p.evaluate(() => { const i = document.getElementById('helpQ'), c = getComputedStyle(i); return { bg: c.backgroundColor, fg: c.color, h: i.getBoundingClientRect().height }; });
+  ok(sb.bg !== sb.fg && sb.h >= 40, `320px ${ui} ${mode}: the search box has its own background (${sb.bg}) and is tall enough (${sb.h}px)`);
   await p.context().close();
 }
 

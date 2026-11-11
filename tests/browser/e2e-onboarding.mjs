@@ -61,8 +61,9 @@ ok((await counts(p)).decks.length === 1, 'going back and forward does not make a
 // Paste notes: Import opens with this deck chosen, and after saving, the guided review follows
 await p.click('#wlPaste'); await p.waitForSelector('#pasteBox');
 const deckId = c.decks[0].id;
-ok(p.url().endsWith('#/import/' + deckId) && await p.inputValue('#deckSel') === deckId, 'paste notes opens Import with the new deck chosen');
+ok(p.url().endsWith('#/import/' + deckId + '/paste') && await p.inputValue('#deckSel') === deckId, 'paste notes opens Import with the new deck chosen');
 ok(await p.locator('#pasteBox').isVisible(), 'the paste box is showing');
+ok(!(await p.locator('#tab-file').isVisible()) && !(await p.locator('#deckSel').isVisible()) && !(await p.locator('#claudeBtn').isVisible()) && !(await p.locator('#suggestBtn').isVisible()) && await p.locator('#moreWays').isVisible(), 'first run: only the paste box shows, with a More ways to add link');
 await p.fill('#pasteBox', 'Mitochondria - makes ATP\nRibosome - builds proteins\nNucleus - holds the DNA\nGolgi - packs proteins\nLysosome - digests waste');
 await p.waitForSelector('#saveBtn:not([disabled])'); await p.click('#saveBtn');
 await p.waitForSelector('.guide #coach');

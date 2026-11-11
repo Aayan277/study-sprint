@@ -115,7 +115,7 @@ export async function renderToday(el) {
         ${tr.state === 'todo'
           ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
           : `<div class="th-done">
-              <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
+              <p>Nothing is due right now. ${[nextDueText(data, c.cards), data.hiddenCount ? `${data.hiddenCount.toLocaleString('en')} hidden` : ''].filter(Boolean).join(' · ')}</p>
               <button class="btn ghost th-extra" type="button" id="customLink">Extra study</button></div>`}
       </section>
       ${rescueHTML()}
@@ -171,7 +171,7 @@ export async function renderToday(el) {
     return `<section class="rescue-banner" aria-labelledby="rbTitle">
       <p class="rb-title" id="rbTitle"><b>${plural(o.backlog, 'overdue card')}</b> piled up. Spread them over
         <span class="chips rb-chips" role="group" aria-label="Number of days">${choices.map(n => `<button type="button" class="tchip" data-rdays="${n}" aria-pressed="${n === rescueDays}">${n} days</button>`).join('')}</span>?</p>
-      <p class="rb-pre mono" id="rbPre">About ${per} overdue + ${o.typical} of your usual cards a day.</p>
+      <p class="rb-pre mono" id="rbPre">~${per} overdue + ${o.typical} usual a day</p>
       <div class="rb-actions">
         <button class="btn ghost small" type="button" id="rescueNo">Not today</button>
         <button class="btn primary small" type="button" id="rescueGo">Spread them out</button>
@@ -206,10 +206,10 @@ export async function renderToday(el) {
     const startable = (d, ownToo = true) =>
       Math.min(ownToo ? own(d) : Infinity, (left.get(d.id) || 0) + data.decks.filter(k => k.parentId === d.id).reduce((t, k) => t + startable(k), 0));
     const others = [
-      { limit: data.settings.newPerDay + data.extra, text: `Raise New cards per day in Settings to ${n}.` },
+      { limit: data.settings.newPerDay + data.extra, text: `Settings limit too low (needs ${n})` },
       ...ancestors(data.decks, deck.id).slice(1).filter(d => Number.isFinite(d.newPerDay))
-        .map(d => ({ limit: own(d), text: `${d.name} limits it to ${own(d)} a day: raise that in its Edit deck.` })),
-      { limit: startable(deck, false), text: 'A subdeck\'s own limit holds it back: raise that in its Edit deck.' }
+        .map(d => ({ limit: own(d), text: `${d.name}'s limit: ${own(d)} a day` })),
+      { limit: startable(deck, false), text: 'A subdeck\'s limit holds it back' }
     ];
     const lowest = others.reduce((a, b) => (b.limit < a.limit ? b : a));
     return { unstarted, n, now: Math.min(own(deck), lowest.limit), blocked: lowest.limit < n ? lowest.text : '' };
@@ -222,7 +222,7 @@ export async function renderToday(el) {
     const by = new Date(info.start).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     // A button only when setting this deck's limit is enough; otherwise say which limit holds it back.
     const plan = !unstarted || info.daysLeft < 1 ? '' : `<p class="exam-new" data-newplan="${esc(deck.id)}">
-      <span><b>${n} new a day</b> · by ${esc(by)}${n > 60 ? ' (that is a lot: start sooner if you can)' : ''}</span>
+      <span><b>${n} new a day</b> · by ${esc(by)}</span>
       ${ok ? '' : blocked ? `<span class="small" data-blocked>${esc(blocked)}</span>`
         : `<button class="btn ghost small" type="button" data-setnew="${esc(deck.id)}">Set to ${n} a day</button>`}</p>`;
     // One bar per exam: the cards started out of all the cards in the deck and its subdecks, with "On track" beside it.
@@ -291,7 +291,7 @@ export async function renderToday(el) {
     el.querySelectorAll('[data-rdays]').forEach(b => b.addEventListener('click', () => {
       rescueDays = +b.dataset.rdays;
       el.querySelectorAll('[data-rdays]').forEach(x => x.setAttribute('aria-pressed', x === b));
-      $('rbPre').textContent = `About ${Math.ceil(rescue.offer.backlog / rescueDays)} overdue + ${rescue.offer.typical} of your usual cards a day.`;
+      $('rbPre').textContent = `~${Math.ceil(rescue.offer.backlog / rescueDays)} overdue + ${rescue.offer.typical} usual a day`;
     }));
     $('startBtn')?.addEventListener('click', () => launch({ deckIds: chosen }));
     $('optBtn')?.addEventListener('click', () => openOptions());
@@ -389,7 +389,6 @@ export async function renderToday(el) {
           ${[[1, 'Tomorrow'], [3, '3 days'], [7, '1 week'], [14, '2 weeks']].map(([d, l]) =>
             `<button type="button" class="tchip" data-days="${d}" aria-pressed="${d === days}">${l}</button>`).join('')}
         </div>
-        <p class="note">Reschedules these cards from today.</p>
         <button class="btn primary small" type="button" id="csAheadBtn"></button>
       </div>
       <div class="cs-opt">
