@@ -3346,3 +3346,8 @@ main h2[tabindex="-1"]{outline:none}
 .sheet-head.has-help h2{flex:0 1 auto}
 .sheet-head .help-link{position:relative;margin-left:0;display:inline-grid;place-items:center;box-sizing:border-box;width:24px;height:24px;margin-top:6px;border:1px solid var(--line-strong);border-radius:50%;text-decoration:none;color:var(--text-2);font-size:var(--fs-xs);font-weight:600;line-height:1}
 .sheet-head.has-help .sheet-x{margin-left:auto}
+
+/* 4.66 WP-C */
+.help-search{margin:0 0 14px}
+.help-search .deck-search{flex:none;width:100%;max-width:520px}
+#helpNone{margin:0 0 14px}

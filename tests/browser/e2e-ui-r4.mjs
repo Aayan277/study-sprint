@@ -98,7 +98,7 @@ for (const [label, viewport, touch] of [['PC 1440x900', PC, false], ['phone 390x
   // ---------- Stats: the Retention caption stays; the streak caption goes ----------
   await go(p, '#/stats', '.pgrid');
   const ret = await norm(p, '.pc-ret');
-  ok(await p.locator('.pc-ret p:visible').count() === 1 && /You remembered \d+ of \d+ due reviews? in the last 30 days\./.test(ret), label + ': the Retention caption is still visible: ' + ret);
+  ok(await p.locator('.pc-ret p:visible').count() === 1 && /\d+ of \d+ remembered · 30 days/.test(ret), label + ': the Retention caption is still visible: ' + ret);
   ok(!/Any deck counts|You studied today/.test(await norm(p, '.pc-streak')), label + ': the streak card has no "You studied today. Any deck counts." caption');
   await noHScroll(p, label + ' Stats');
 

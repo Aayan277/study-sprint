@@ -44,9 +44,9 @@ await page.click('.tab[data-tab=decks]'); await page.click('.tab[data-tab=stats]
 ok((await page.textContent('.pgrid .big')).trim().startsWith('6'), 'streak of 6 days (days 0-5 studied): ' + (await page.textContent('.pgrid .big')).trim());
 ok((await page.locator('.wd.on').count()) === 6 && (await page.locator('.wd.today.on').count()) === 1, '7-day dots: 6 of 7 on (day 6 skipped), today highlighted');
 const retText = await page.locator('.pgrid .card').nth(1).textContent();
-ok(/\d+%/.test(retText) && /remembered \d+ of \d+ due reviews/.test(retText), 'retention shown: ' + retText.replace(/\s+/g, ' ').trim());
+ok(/\d+%/.test(retText) && /\d+ of \d+ remembered · 30 days/.test(retText), 'retention shown: ' + retText.replace(/\s+/g, ' ').trim());
 // Retention counts recall only: the Play answers here are multiple choice (mode 'flip' is not typing), so they are left out.
-const shownTotal = +/of (\d+) due reviews/.exec(retText)[1];
+const shownTotal = +/\d+ of (\d+) remembered/.exec(retText)[1];
 const reviewLogs = await page.evaluate(async () => { const { daysAgoStart } = await import('./js/stats-calc.js'); const since = daysAgoStart(29);
   return (await (await import('./js/db.js')).getLogsSince(since)).filter(l => l.source === 'review' && l.state === 2).length; });
 ok(shownTotal === reviewLogs, `retention counts the ${reviewLogs} Review answers, not the Play multiple choice ones: ${shownTotal}`);
