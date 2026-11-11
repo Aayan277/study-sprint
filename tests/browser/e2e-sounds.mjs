@@ -75,7 +75,7 @@ for (const [file, deckName] of [['anki-sound-new.apkg', 'Sounds new'], ['anki-so
   ok(found.includes('Found 8 cards') || found.includes('Found 9 cards'), `${file}: ${found.slice(0, 80)}`);
   ok(found.includes('4 notes have sounds, which come along too.'), `${file}: the summary says how many notes have sounds`);
   ok(found.includes("3 sounds weren't imported: 1 is bigger than 1 MB, 1 isn't in the file, 1 is a format the app can't keep."), `${file}: the sounds not imported are counted by reason (${found.replace(/.*(\d sounds? w)/s, '$1').slice(0, 120)})`);
-  ok(await page.isVisible('#soundRow') && (await page.textContent('#soundRow')).includes('Bring sounds') && /About \d+ KB\. Kept on this device, synced like pictures and kept in backups\./.test(await page.textContent('#soundRow')), `${file}: the Bring sounds switch shows the size`);
+  ok(await page.isVisible('#soundRow') && (await page.textContent('#soundRow')).includes('Bring sounds') && /About \d+ KB$/.test((await page.textContent('#soundRow')).trim()) && !(await page.textContent('#soundRow')).includes('Kept on this device'), `${file}: the Bring sounds switch shows the size`);
   ok(await page.isChecked('#ankiSounds'), `${file}: Bring sounds starts on`);
   soundRowTexts.push(await page.textContent('#soundInfo'));
   if (file.includes('new')) await page.screenshot({ path: SP + '/snd-import-375.png', fullPage: true });
