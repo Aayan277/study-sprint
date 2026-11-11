@@ -76,6 +76,18 @@ for (const [w, h] of [[375, 740], [1280, 800]]) {
   ok(await p.locator('details.help-q:not([hidden])').count() === n && !(await p.locator('#helpNone').isVisible()) && await p.locator('details.help-q[open]').count() === 0, tag + 'clearing the box shows all answers, closed');
   await p.goto(APP + '#/help/ratings'); await p.waitForSelector('#h-ratings[open]');
   ok((await p.inputValue('#helpQ')) === '', tag + 'a deep link opens with an empty search box');
+  // clearing the search puts back what was open before it (the deep-linked answer, and one opened by hand)
+  const openIds = () => p.$$eval('details.help-q[open]', els => els.map(e => e.id).sort().join());
+  await p.click('#h-cloze > summary');
+  const was = await openIds();
+  ok(was === ['h-cloze', 'h-ratings'].join(), tag + 'two answers open before searching: ' + was);
+  await p.fill('#helpQ', 'streak');
+  ok((await openIds()) !== was, tag + 'searching opens the matches instead');
+  await p.fill('#helpQ', 's');
+  ok((await openIds()) === was, tag + 'one letter: the search opens nothing and the earlier answers are back: ' + await openIds());
+  await p.fill('#helpQ', 'streak');
+  await p.fill('#helpQ', '');
+  ok((await openIds()) === was && await p.locator('details.help-q:not([hidden])').count() === n, tag + 'clearing the box restores the open answers and shows all');
   await p.context().close();
 }
 

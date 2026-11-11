@@ -98,7 +98,7 @@ await go(p, '#/deck/Bio', '.deck-summary');
 ok(await num(p, '.deck-summary .due b') === 5, 'Biology page: 5 due');
 ok(/4 held to tomorrow/.test(await p.textContent('.held-note')), 'Biology: 4 held to tomorrow');
 const shared = (await p.textContent('.subdecks-page .note')).replace(/\s+/g, ' ');
-ok(/Shared limit: 5 due a day/.test(shared), 'the shared-limit note: ' + shared);
+ok(/Shared limit: 5 due today/.test(shared), 'the shared-limit note: ' + shared);
 await go(p, '#/decks', '.deck');
 ok(await num(p, '.deck:has-text("Biology") > .deck-open .due b') === 5, 'the Decks tile says 5 too');
 await setDeck(p, 'Bio', { reviewPerDay: null }); await setDeck(p, 'Chem', { reviewPerDay: null });

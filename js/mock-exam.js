@@ -511,7 +511,7 @@ async function drawResults({ fresh = false } = {}) {
   const missed = missedIds(qs, score.per);
   const limitMs = run.cfg.limit * 60000;
   const timeLine = state.auto ? "Time's up: submitted" : limitMs ? `${clock(state.elapsed)} of ${clock(limitMs)} used.` : '';
-  const trend = state.prev == null ? '' : score.pct === state.prev ? `Same as last (${state.prev}%)` : `${score.pct > state.prev ? '+' : '-'}${Math.abs(score.pct - state.prev)} since last (${state.prev}%)`;
+  const trend = state.prev == null ? '' : score.pct === state.prev ? `Same as last (${state.prev}%)` : `${score.pct > state.prev ? '+' : '\u2212'}${Math.abs(score.pct - state.prev)} since last (${state.prev}%)`;
   const root = deckPath(decks, run.deckId);
   const rel = id => { const p = deckPath(decks, id); return id === run.deckId ? `${decks.find(d => d.id === id)?.name || 'Deleted deck'} (this deck)` : !p ? 'Deleted deck' : root && p.startsWith(root + ' › ') ? p.slice(root.length + 3) : p; };
   const bars = (list, label) => `<ul class="t-bars">${list.map(g => `<li class="t-bar-row"><span class="t-bar-l">${esc(label(g.key))}</span>

@@ -17,9 +17,7 @@ import { savedTooBigNote } from './quota.js';
 import { MAX_PARTS, splitBack, splitCards, unleeched, parked, canSplit, withoutLeechTag, forgottenText } from './leech-logic.js';
 
 // After a card of a pair is deleted, its partner is an ordinary card again.
-async function unpairPartner(card) {
-  if (!isPair(card)) return;
-  const left = (await db.getAll('cards')).filter(c => c.id !== card.id && isPair(c) && c.noteId === card.noteId);
+async function unpairPartner(left) {
   if (left.length) await db.saveCards(left.map(unpaired));
 }
 
@@ -29,7 +27,7 @@ async function deleteWithSnapshot(card) {
   const partner = isPair(card) ? (await db.getAll('cards')).filter(c => c.id !== card.id && isPair(c) && c.noteId === card.noteId) : [];
   const snap = await db.deleteCards([card.id]);
   snap.cards.push(...partner);
-  await unpairPartner(card);
+  await unpairPartner(partner);
   db.holdMedia();
   return snap;
 }
@@ -205,7 +203,11 @@ function openSplit(card, done) {
       closeSheet();
       done(`Split into ${made.length} cards${keep ? '. The original stays suspended.' : '.'}`, snap ? undoOpts(async () => {
         await db.restoreSnapshot(snap);                    // the original comes back with its history; the new cards go
-        await db.deleteCards(made.map(c => c.id));
+        try { await db.deleteCards(made.map(c => c.id)); } catch (err) {
+          console.error(err);          // (undoOpts would say "Nothing was changed", which is no longer true here)
+          toast("Card restored, but the new cards are still there. Delete them from All cards.");
+          return;
+        }
         toast('Card restored');
       }) : undefined);
     } catch (err) {

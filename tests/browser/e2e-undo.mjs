@@ -274,5 +274,30 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   ok(await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.front === 'Primary colours').length === 1), 'Undo removes the split parts: only the original is left');
   await page.context().close();
 }
+// ---------- the leech coach: Delete on a card with a reverse partner, then Undo, pairs them again ----------
+{
+  const page = await open(null);
+  await page.evaluate(async () => {
+    const db = await import('./js/db.js'); const now = Date.now();
+    await db.addDeckWithCards({ id: 'lp', name: 'Pairs', color: '#46A758', created: now }, [
+      { id: 'PA', deckId: 'lp', front: 'Cat', back: 'Chat', tags: ['lp', 'leech'], suspended: true, created: now, noteId: 'NP' },
+      { id: 'PB', deckId: 'lp', front: 'Chat', back: 'Cat', tags: ['lp'], created: now + 0.5, noteId: 'NP', reverse: true }]);
+    const m = await import('./js/leech-coach.js');
+    const slot = document.createElement('div'); slot.id = 'coachSlot'; (document.querySelector('main') || document.body).prepend(slot);
+    slot.innerHTML = await m.coachHTML(['PA']); m.wireCoach(slot);
+  });
+  const before = await dump(page, ['PA', 'PB']);
+  ok(before.cards.PA.noteId === 'NP' && before.cards.PB.noteId === 'NP' && before.cards.PB.reverse === true, 'pair set up: two cards share a noteId');
+  await page.click('.coach-row[data-id=PA] [data-act=delete]'); await page.waitForSelector('.coach-confirm .confirm');
+  await page.click('.coach-confirm [data-yes]');
+  await page.waitForFunction(() => !document.querySelector('.coach-row[data-id=PA]'));
+  const mid = await page.evaluate(async () => { const db = await import('./js/db.js'); return { a: await db.get('cards', 'PA'), b: await db.get('cards', 'PB') }; });
+  ok(!mid.a && mid.b && mid.b.noteId === undefined && mid.b.reverse === undefined, 'Delete: the partner is an ordinary card again');
+  await undoClick(page);
+  await page.waitForFunction(() => /Card restored/.test(document.querySelector('#toast')?.textContent || ''));
+  const after = await dump(page, ['PA', 'PB']);
+  ok(same(before, after), 'Undo: both cards are back and paired again');
+  await page.context().close();
+}
 if (errors.length) { console.log('FAIL errors: ' + errors.join(' | ')); process.exitCode = 1; } else ok(true, 'no page errors');
 await browser.close();

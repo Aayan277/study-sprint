@@ -229,7 +229,7 @@ export async function renderImport(el, arg) {
   wirePreview();
   wireSuggest();
   if (firstTab === 'file') $('tab-file').click();
-  if (firstTab === 'paste') wirePasteOnly(el);
+  if (firstTab === 'paste' && S.deckId !== NEW_DECK) wirePasteOnly(el);          // only for a deck that exists
   await loadDeckFronts();
   if (shared) await takeShared();
   else if (firstTab !== 'file' && $('pasteBox')) {
@@ -310,6 +310,7 @@ function wirePaste() {
   });
   $('clearBtn').addEventListener('click', () => {
     clearTimeout(S.pasteTimer);
+    S.pasteToken = (S.pasteToken || 0) + 1; S.aiAnswer = false;          // a "Paste Claude's answer" read still waiting is dropped
     setSuggest(false);
     S.blocks = false; S.aiMade = false; S.aiPending = false; $('aiNote').hidden = true; $('proseNote').hidden = true;
     $('pasteBox').value = '';
@@ -344,7 +345,9 @@ function showText(text) {
 }
 
 // Copy to the clipboard, with an older fallback for browsers that block the modern way.
+let lastCopied = '';          // the prompt we last put on the clipboard, so "Paste Claude's answer" can tell it from an answer
 async function copyText(text) {
+  lastCopied = text;
   try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* try the fallback */ }
   const t = document.createElement('textarea');
   t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
@@ -495,18 +498,28 @@ function wireDoc() {
 
 // "Paste Claude's answer": reads the clipboard into the box and shows the cards. When the browser can't, or there is nothing
 // there, the person is taken to the box to paste it themselves. (The state S is checked after the wait: the screen may be gone.)
+function isOurPrompt(text) {
+  const t = text.trim(), mine = lastCopied.trim();
+  if (!t || !mine) return false;
+  const first = mine.split('\n')[0].trim();
+  return t === mine || (first.length > 0 && t.startsWith(first));
+}
 async function pasteAnswer() {
   clearTimeout(S.pasteTimer);
   setSuggest(false);
-  const s = S;
+  const s = S, token = S.pasteToken = (S.pasteToken || 0) + 1;
   let text = '';
   try { text = (await navigator.clipboard.readText()) || ''; } catch { text = ''; }
-  if (S !== s || !$('pasteBox')?.isConnected) return;
+  if (S !== s || S.pasteToken !== token || !$('pasteBox')?.isConnected) return;
+  if (isOurPrompt(text)) { toast("Copy Claude's answer first"); return; }          // the prompt we copied is not an answer
   if (text.trim()) {
     $('tab-paste').click();
-    $('pasteBox').value = text;
-    S.blocks = false; S.aiMade = true; S.aiPending = false;
-    $('aiNote').hidden = false; $('aiView').hidden = true; $('claudeNote').hidden = true;
+    const box = $('pasteBox'), more = aiParts.length >= 2 && !$('aiView').hidden;
+    // With several parts, the next answer goes at the end of the one already there.
+    if (S.aiAnswer && more && box.value.trim()) { box.value = box.value.replace(/\s+$/, '') + '\n' + text; text = box.value; }
+    else box.value = text;
+    S.blocks = false; S.aiMade = true; S.aiPending = false; S.aiAnswer = true;
+    $('aiNote').hidden = false; $('aiView').hidden = !more; $('claudeNote').hidden = true;
     saveDraft(text);
     showText(text);
     return;
@@ -514,6 +527,7 @@ async function pasteAnswer() {
   $('tab-paste').click();
   $('aiView').hidden = true;
   $('aiNote').hidden = false;
+  S.aiPending = true;          // what is pasted by hand next gets the ai-made tag
   $('pasteBox').focus();
   toast('Paste the answer here');
 }

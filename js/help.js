@@ -206,15 +206,18 @@ export function renderHelp(el, id) {
     <p class="note">Contact: ${contactHTML()}</p>`;
   // Search: hide answers that don't match (summary and answer text), hide empty sections, open the matches from 2 letters.
   const qBox = el.querySelector('#helpQ'), none = el.querySelector('#helpNone');
+  let before = null;                 // which answers were open when the search started (the deep-linked one, say), put back when it ends
   const filter = () => {
     const q = qBox.value.trim().toLowerCase();
+    if (q && !before) before = new Set([...el.querySelectorAll('details.help-q[open]')].map(d => d.id));
     let shown = 0;
     for (const d of el.querySelectorAll('details.help-q')) {
       const hit = !q || d.textContent.toLowerCase().includes(q);
       d.hidden = !hit;
       if (hit && q) shown++;
-      if (q.length >= 2) d.open = hit; else if (!q) d.open = false;
+      if (q.length >= 2) d.open = hit; else if (before) d.open = before.has(d.id);
     }
+    if (!q) before = null;
     for (const sec of el.querySelectorAll('.help-sec')) sec.hidden = !!q && !sec.querySelector('details.help-q:not([hidden])');
     none.hidden = !q || shown > 0;
   };

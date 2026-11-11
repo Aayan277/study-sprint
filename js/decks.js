@@ -311,7 +311,7 @@ export async function renderDeck(el, deckId) {
   await mountBrowser($('browser'), { deckId, data: today, onChange: () => refreshCounts(el, deckId) });
 }
 
-// "Shared limit: 20 due a day" (or '' when they don't).
+// "Shared limit: 20 due today" (or '' when they don't).
 // The subdecks are counted one by one, each against the same shared limits, so they can add up to more than the parent shows.
 // With no limits at all that can't happen, and if it does the numbers are wrong: say so in the console (dev builds).
 function sharedLimitNote(today, deck, kids, depth, counts) {
@@ -321,7 +321,7 @@ function sharedLimitNote(today, deck, kids, depth, counts) {
   // Only a review limit can make the subdecks' due add up to more than the deck (newPerDay is always set, so it says nothing).
   if (!hasReviewLimit(today) && (sumDue > counts.due) && /^(localhost|127\.)/.test(location.hostname)) console.warn(`Deck counts: the subdecks of "${deck.name}" add up to more than the deck`, { sumDue, sumNew, counts });
   const [n, word] = sumDue > counts.due ? [counts.due, 'due'] : sumNew > counts.fresh ? [counts.fresh, 'new'] : [0, ''];
-  return word ? `Shared limit: ${n} ${word} a day` : '';
+  return word ? `Shared limit: ${n} ${word} today` : '';
 }
 
 // The ⋯ menu in a deck page's header: Edit, Add subdeck and Export. Opens under the button; Esc, a click outside or

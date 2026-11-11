@@ -161,7 +161,7 @@ function calendarHTML(cal, now) {
   return `
     <section class="card section cal-card" aria-labelledby="calTitle">
       <div class="mhead"><h2 id="calTitle">Study calendar</h2>
-        <span class="muted small">${plural(cal.daysStudied, 'day')} this year · best ${cal.longest}</span></div>
+        <span class="muted small">${plural(cal.daysStudied, 'day')} in the past year · best streak ${plural(cal.longest, 'day')}</span></div>
       <div class="cal" role="img" aria-label="${esc(`Studied on ${cal.daysStudied} of the last ${cal.daysShown} days, ${plural(cal.answers, 'answer')} in all. Longest streak ${plural(cal.longest, 'day')}.${cal.weeks.some(w => w.some(d => d.frozen)) ? ' Days covered by a streak freeze have a diagonal hatch.' : ''}`)}">
         <span class="cal-wd" aria-hidden="true"><b></b><b>Mon</b><b></b><b>Wed</b><b></b><b>Fri</b><b></b><b></b></span>
         <div class="cal-scroll" id="calScroll">

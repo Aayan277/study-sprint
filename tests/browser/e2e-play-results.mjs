@@ -1,6 +1,6 @@
-// Play results (Round 2, A5) and Play's polish (A6): the order of the results screen, the first three misses plus
-// "Show all", "First score for this setup" / "New best", a D with no "Keep practicing", leeches handed to the finish
-// slot, the key hint only with a mouse, the empty Play screen, and re-tapping the Play tab starting a fresh setup.
+// Play results and Play's polish: the order of the results screen, the first three misses plus "Show all",
+// "First score for this setup" / "New best", a D with no "Keep practicing", leeches shown in the finish slot,
+// the key hint only with a mouse, the empty Play screen, and tapping the Play tab again starting a fresh setup.
 import { chromium } from './pw.mjs';
 const SP = process.argv[2] || '/tmp';
 const browser = await chromium.launch();
