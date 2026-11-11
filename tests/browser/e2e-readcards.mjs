@@ -189,8 +189,9 @@ const hrefs = await page.$$eval('#aiSites [data-site]', a => a.map(x => x.getAtt
 const { AI_SITES } = await page.evaluate(async () => import('./js/doc-import.js'));
 ok(JSON.stringify(hrefs) === JSON.stringify(AI_SITES.map(a => a.url)), 'the links are Claude, ChatGPT and Gemini: ' + hrefs.join(' '));
 ok(await page.$$eval('#aiSites [data-site]', a => a.every(x => x.target === '_blank' && /noopener/.test(x.rel))), 'they open in a new tab without a connection back');
-await page.click('#aiBack');
-ok(await page.isVisible('#aiNote') && await page.evaluate(() => document.activeElement.id) === 'pasteBox', '"I have the answer" goes back to the box');
+await page.evaluate(() => { Object.defineProperty(navigator.clipboard, 'readText', { configurable: true, value: () => Promise.reject(new Error('denied')) }); });
+await page.click('#aiBack'); await page.evaluate(() => { delete navigator.clipboard.readText; });
+ok(await page.isVisible('#aiNote') && await page.evaluate(() => document.activeElement.id) === 'pasteBox', '"Paste the answer" with no clipboard answer goes back to the box');
 
 // ---- 10. a narrow screen ----
 await ctx.close();
@@ -316,7 +317,7 @@ await p5.evaluate(() => document.getElementById('sugStop').click());
 await p5.waitForSelector('#sugNote:not([hidden])');
 ok((await p5.textContent('#sugNote')) === 'Stopped. Press Suggest cards to try again.' || (await p5.textContent('#sugNote')).startsWith('Stopped.'), 'Stop on a re-run: a note, not an error: ' + await p5.textContent('#sugNote'));
 ok(await p5.locator('.prow.sug').count() === rowsBefore && await p5.locator('.prow.sug .pick:checked').count() === tickedBefore && await p5.isVisible('#preview') && await p5.isHidden('#loadErr'), 'the suggestions and ticks stay');
-// the AI view goes away on the Sheets tab and after "I have the answer"; it does not tag the notes
+// the AI view goes away on the Sheets tab and after "Paste the answer"; it does not tag the notes
 await p5.click('#sugAi');
 await p5.waitForSelector('#aiView:not([hidden])');
 await p5.click('#tab-sheet');
@@ -324,8 +325,9 @@ ok(await p5.isHidden('#aiView'), 'the AI view is hidden on the Google Sheets tab
 await p5.click('#tab-paste');
 await p5.click('#suggestBtn'); await p5.waitForSelector('.prow.sug');
 await p5.click('#sugAi'); await p5.waitForSelector('#aiView:not([hidden])');
-await p5.click('#aiBack');
-ok(await p5.isHidden('#aiView'), 'and after "I have the answer"');
+await p5.evaluate(() => { Object.defineProperty(navigator.clipboard, 'readText', { configurable: true, value: () => Promise.reject(new Error('denied')) }); });
+await p5.click('#aiBack'); await p5.evaluate(() => { delete navigator.clipboard.readText; });
+ok(await p5.isHidden('#aiView'), 'and after "Paste the answer"');
 await fill5('Front one - back one\nFront two - back two');
 await p5.waitForSelector('.prow');
 ok(!(await p5.textContent('#found')).includes('Tags come along'), 'notes still in the box are not tagged ai-made');

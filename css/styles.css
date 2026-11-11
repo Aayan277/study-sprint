@@ -3353,3 +3353,11 @@ main h2[tabindex="-1"]{outline:none}
 .res-more[hidden]{display:none}
 .res-more .btn{width:100%;justify-content:center}
 @media (min-width:600px){.res-more{flex-direction:row;flex-wrap:wrap}.res-more .btn{width:auto}}
+
+/* 4.66 WP-B */
+:root .pane-actions .push-end{margin-inline-start:auto}
+:root #claudeNote #pasteAnsBtn{display:flex;width:fit-content;margin-top:10px}
+:root .paste-only .seg,
+:root .paste-only #deckSection,
+:root .paste-only #pane-paste .pane-actions{display:none}
+:root .paste-only-more{display:block;margin:10px 0 0;min-height:44px;color:var(--accent-text)}
