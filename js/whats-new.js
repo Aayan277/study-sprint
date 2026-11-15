@@ -11,7 +11,7 @@ export const NOTES = [
   { version: '4.67', items: [
     'Searching on the Decks screen now finds cards too, and deleting a deck offers to save a copy first.',
     'On a computer: buttons line up in two sizes, Start sits at the right of the top card, and switches are on the left.',
-    'A Flagged option in the card filter, and your own model now needs stronger proof before it takes over.',
+    'The card filter’s flag option is now called Flagged, and your own model now needs stronger proof before it takes over.',
   ] },
   { version: '4.66', items: [
     'Search in Help, and a Paste Claude\u2019s answer button in Import.',

@@ -121,7 +121,8 @@ export async function renderLibrary(el) {
   const cnt = id => { let c = countsMemo.get(id); if (!c) countsMemo.set(id, c = countFor(today, [id])); return c; };
   const view = { query: '', sort: savedSort(), hits: null, pending: false };      // hits: deck id → how many cards match the search (a deck counts its subdecks' cards)
   const chains = chainMap(today.decks);
-  const stopFold = prefoldIdle(today.allCards, () => el.isConnected);
+  el._stopFold?.();
+  const stopFold = el._stopFold = prefoldIdle(today.allCards, () => el.isConnected);
   let searchTimer = 0;
 
   // One deck's tile. `q` is the search text (compact only): a course that matches only through a subdeck shows just those subdecks.
@@ -199,28 +200,28 @@ export async function renderLibrary(el) {
       <span><b class="mono">${sum('total').toLocaleString('en')}</b> cards</span>
       <a class="link" href="#/today">Today ${icon('chevron')}</a>
     </div>`}
-    ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p id="cardHits" hidden></p><p class="note" id="deckNone" hidden></p>`
+    ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p id="cardHits" aria-live="polite" hidden></p><p class="note" id="deckNone" hidden></p>`
     : emptyStartHTML()}
     ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards →</a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
   `;
 
   // The tiles are drawn from the search text and the sort, so both just redraw this part.
-  const grid = $('deckGrid');
+  const grid = $('deckGrid'), hitsP = $('cardHits'), noneP = $('deckNone');
   const drawGrid = () => {
-    if (!grid) return;
+    if (!grid?.isConnected) return;
     const { q, rows } = shown();
     const firstDue = view.sort === 'due' ? rows.find(x => cnt(x.deck.id).total) : null;
     grid.innerHTML = rows.map(x => tile(x, q, x === firstDue)).join('');
     const total = view.hits ? top.reduce((n, x) => n + (view.hits.get(x.deck.id) || 0), 0) : 0;
-    const hitsP = $('cardHits');
     hitsP.hidden = !total;
     hitsP.innerHTML = total ? `<button class="link" type="button" id="showHits">Show ${total.toLocaleString('en')} matching ${total === 1 ? 'card' : 'cards'}</button>` : '';
     const none = rows.length === 0 && !view.pending;
-    $('deckNone').hidden = !none;
-    $('deckNone').textContent = none ? `No decks or cards match “${view.query.trim()}”.` : '';
+    noneP.hidden = !none;
+    noneP.textContent = none ? `No decks or cards match “${view.query.trim()}”.` : '';
   };
   // The search also looks in the cards (front, back, tags) once you stop typing: one pass counts the matches per deck.
   const cardPass = q => {
+    if (!grid?.isConnected) return;
     const m = cardMatcher(q);
     if (!m) { view.pending = false; drawGrid(); return; }
     const hits = new Map();
@@ -235,7 +236,7 @@ export async function renderLibrary(el) {
     view.query = e.target.value; view.hits = null;
     clearTimeout(searchTimer);
     const q = view.query;
-    view.pending = q.trim().length >= 2;
+    view.pending = q.trim().length >= 2 && !/tag:/i.test(q);      // (a tag: search is not counted: Browse reads it differently)
     drawGrid();
     if (view.pending) searchTimer = setTimeout(() => cardPass(q), 200);
     else grid.dataset.searched = q;
@@ -710,8 +711,8 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
         const ex = await import('./export.js');
         const cards = ex.cardsForExport(deck, decks, all.filter(c => tree.includes(c.deckId)));
         ex.download(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'));
-        b.textContent = 'Copy saved'; b.disabled = true;
-        toast('Copy saved to your downloads');
+        b.textContent = 'Copy downloaded'; b.disabled = true; $('delNo').focus();
+        toast('Copy downloaded');
       } catch { toast('Could not save a copy'); }
     });
     // Undo puts back every deck, card, schedule and review that the delete removed, and any subdeck that was moved up (db.restoreSnapshot).

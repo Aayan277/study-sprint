@@ -58,6 +58,17 @@ const reload = async p => { await p.reload(); await p.waitForSelector('#deckGrid
   await ctx.close();
 }
 
+// ---- Leaving Decks mid-search ----
+{
+  const { ctx, p } = await open(390, 844); await seed(p); await reload(p);
+  const before = errors.length;
+  await p.fill('#deckSearch', 'mitochon');
+  await p.evaluate(() => { location.hash = '#/deck/A'; });
+  await p.waitForTimeout(400);
+  ok(errors.length === before, 'leaving Decks during the 200ms wait throws nothing');
+  await ctx.close();
+}
+
 // ---- Performance with 20k cards ----
 {
   const { ctx, p } = await open(1440, 900); await seed(p, 20000); await reload(p);
@@ -82,7 +93,7 @@ for (const ui of [false, true]) {
   const txt = fs.readFileSync(await dl.path(), 'utf8');
   ok(dl.suggestedFilename() === 'Cell Biology.csv', `${T}: file is ${dl.suggestedFilename()}`);
   ok(txt.includes('mitochondria powerhouse') && txt.includes('sub front 0'), `${T}: the copy has the deck's and its subdeck's cards`);
-  ok((await p.textContent('#delCopy')).trim() === 'Copy saved' && await p.isDisabled('#delCopy'), `${T}: button says "Copy saved"`);
+  ok((await p.textContent('#delCopy')).trim() === 'Copy downloaded' && await p.isDisabled('#delCopy'), `${T}: button says "Copy downloaded"`);
   ok(await p.evaluate(async () => !!(await (await import('./js/db.js')).get('decks', 'A'))), `${T}: the deck still exists`);
   const ord = await p.$$eval('.sheet-actions .btn', b => b.map(x => { const r = x.getBoundingClientRect(); return [x.id, Math.round(r.y) * 10000 + r.x]; }));
   ok(ord.map(x => x[0]).join() === 'delNo,delKeep,delYes' && ord.every((x, i) => !i || x[1] > ord[i - 1][1]), `${T}: action buttons keep their order: ${ord.map(x => x[0]).join()}`);

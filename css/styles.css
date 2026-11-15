@@ -3389,4 +3389,5 @@ main h2[tabindex="-1"]{outline:none}
 /* 4.67 WP-B */
 .deck-counts .hit{color:var(--accent-text)}
 #cardHits{margin:0 0 var(--s-2)}
+#cardHits .link{color:var(--accent-text);font-weight:500;font-size:var(--fs-sm);padding:0;min-height:44px;text-align:left}
 .del-copy{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:var(--s-2) 0}
