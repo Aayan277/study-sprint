@@ -384,3 +384,28 @@ Among the "watch first" rule variants in the grid (N_live 50, 100, 200, 300, 500
 2. the simulator control in the FSRS world with the true chance as the second model (any Better is wrong).
 
 The rate is the share of (user, draw) pairs, or of control learners, whose first check says Better. Users who never reach the checks count as no Better. The shipped setting (N_LIVE 300, MIN_SCORED 1000, MIN_DAYS 7, 2 Better checks on different days at most 7 days apart) is reported against the same rule: pass or fail. If no variant meets both limits, the report says so and no variant is chosen.
+
+### Part B results (model A6, code efcfbdf; aggregates only, validation split)
+
+Half A = 355 users, half B = 302 (replay) / 299 (shadow). B7 was run once on half B, with the variants and the 5% rule written down before any half-B result was opened. "Own truth" = Own plays the learner's real memory; "FSRS truth" = FSRS does. Reviews per day = days 2 to the end of a 365-day run, R 0.90, interval band 0.25 to 4 times FSRS and 3650 days at most.
+
+**When does the app say "Better" (B4, B7)?** Turned on after 1000 scored reviews, default FSRS:
+
+| Variant | Half A: got Better / median day / false Better (null) | Half B: got Better / median day / false Better (null) | Control in the FSRS world |
+|---|---|---|---|
+| n300-l95-c2 (shipped) | 94.9% / 23 / 10.6% | 94.0% / 21 / 11.4% | 0.0% |
+| n300-l99-c2 | 93.2% / 25 / 3.3% | 91.3% / 23 / 3.2% | 0.0% |
+| n200-l99-c1 (half-A pick) | 95.8% / 17 / 4.9% | 93.3% / 16 / 4.8% (5.0% among users who reached the checks) | 0.0% |
+
+- The shipped setting FAILS the rule on both halves. The 95% level lets about 1 in 9 sign-flipped (no-real-difference) users through. Every 99% variant is between 3% and 5%.
+- The control never produced a false Better, so the sign-flip null is the limit that bites.
+- The other start points on half A: turned on at the user's first review, only 67% reach the checks and the median is day 93 (about 1100 records); turned on at the cutoff, 87% get a Better at day 16 (shipped setting).
+- Switches after the first: about 1.2 per user (0.75 back to FSRS; about 0.6 of those from the rate limit on Own's calibration, 0.13 because Own got worse). Where Better was reached, Own's log loss over the next 90 days was lower by about 0.06 to 0.07. A monthly FSRS refit shrinks that gain to about 0.045 to 0.064. Retuning Own monthly (99 users) gave Better for 94.9% at median day 15.
+
+**Workload and intervals (B1, B7; Own truth):** Own scheduler 71.9 (half A) and 72.4 (half B) reviews a day; FSRS scheduler 83.0 and 71.0. Retention 0.877 and 0.874 for Own, 0.879 and 0.877 for FSRS. With FSRS truth: 93.6 vs 99.2 (half A), 75.9 vs 76.0 (half B), retention 0.904 to 0.905 vs 0.900 to 0.901. With FSRS weights left at default instead of fitted (half A), Own costs more: 69.9 vs 57.2 reviews a day. Median interval 11 days (Own) vs 12 to 14 (FSRS); 99th percentile about 1050 to 1130 days vs 446 to 482; intervals of 1 day: 22% to 24% vs 15%; 365 days or more: 8.7% to 10.4% vs 7.2% to 8.6%. At the same card state the two models are within 20% of each other for 16% to 18% of passes and 2 times apart or more for 50% to 54%. Intervals that shrank after a success: 8.5% (half A); 16% of cards had two or more. The band changed 33% to 40% of Own's intervals. With the band off (half A, FSRS truth): 80.0 reviews a day, retention 0.907.
+
+**New users (B2, half A, 90 days, Own truth, days 2 to 90, reviews a day):** warm-up on 100 reviews, Own 51.5 vs FSRS 52.6; 500 or 1000 reviews, 74.3 vs 72.6; 3000 reviews, 91.2 vs 87.1. Retention 0.87 for both. A start with 0 reviews was not run (the tool needs at least 1).
+
+**Large collections (B3, 20 val users with over 50,000 reviews):** Own 163.5 vs FSRS 152.8 reviews a day (+7%); retention 0.883 vs 0.891; median interval 17 vs 14.5 days; 99th percentile 1202 vs 510; 365 days or more: 12.8% vs 5.7%; band changed 42%.
+
+**Speed (B5, one build machine, node v22):** small model 0.076 ms a review and 0.20 ms a what-if; medium model 0.157 ms and 0.53 ms (guide: 0.5 and 2 ms). Browser tests e2e-own, e2e-own-fixes and e2e-own-hooks all pass at 4 times and 6 times CPU slowdown.
