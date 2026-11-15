@@ -3366,3 +3366,8 @@ main h2[tabindex="-1"]{outline:none}
 .help-search{margin:0 0 14px}
 .help-search .deck-search{flex:none;width:100%;max-width:520px}
 #helpNone{margin:0 0 14px}
+
+/* 4.67 WP-B */
+.deck-counts .hit{color:var(--accent-text)}
+#cardHits{margin:0 0 var(--s-2)}
+.del-copy{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:var(--s-2) 0}

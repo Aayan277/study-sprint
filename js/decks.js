@@ -5,8 +5,8 @@ import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, sav
 import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
-import { isHidden } from './browse-logic.js';
-import { mountBrowser } from './browse.js';
+import { isHidden, cardMatcher, prefoldIdle } from './browse-logic.js';
+import { mountBrowser, presetBrowse } from './browse.js';
 import { examInfo, countdown, badgeNear, MOCK_DAYS } from './exam.js';
 import { drawSidebar } from './sidebar.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
@@ -119,7 +119,10 @@ export async function renderLibrary(el) {
   // Each deck's numbers are worked out once per render (the queues are not cheap), then reused by the tiles, the sort and the search.
   const countsMemo = new Map();
   const cnt = id => { let c = countsMemo.get(id); if (!c) countsMemo.set(id, c = countFor(today, [id])); return c; };
-  const view = { query: '', sort: savedSort() };
+  const view = { query: '', sort: savedSort(), hits: null, pending: false };      // hits: deck id → how many cards match the search (a deck counts its subdecks' cards)
+  const chains = chainMap(today.decks);
+  const stopFold = prefoldIdle(today.allCards, () => el.isConnected);
+  let searchTimer = 0;
 
   // One deck's tile. `q` is the search text (compact only): a course that matches only through a subdeck shows just those subdecks.
   const tile = (item, q = '', first = false) => {
@@ -134,6 +137,7 @@ export async function renderLibrary(el) {
             ${stats.total ? `<span><b>${stats.total.toLocaleString('en')}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
             <span class="due${c.due ? "" : " zero"}"><b>${c.due.toLocaleString('en')}</b> due</span>
             <span><b>${c.fresh.toLocaleString('en')}</b> new</span>` : '<span>No cards yet</span>'}
+            ${view.hits?.get(deck.id) ? `<span class="hit"><b>${view.hits.get(deck.id).toLocaleString('en')}</b> matching</span>` : ''}
           </span>
         </button>
         ${stats.total ? `<span class="deck-ring" role="img" aria-label="${Math.round(learned * 100)}% learned">${ring(learned, 44, 4, `<span class="mono">${Math.round(learned * 100)}<small>%</small></span>`)}</span>` : ''}
@@ -155,7 +159,7 @@ export async function renderLibrary(el) {
     if (!kids.length) return '';
     const direct = kids.filter(k => k.depth === item.depth + 1).length;
     const selfHit = !q || matches(item, q);
-    if (!selfHit) kids = kids.filter(k => matches(k, q));
+    if (!selfHit) kids = kids.filter(k => matches(k, q) || view.hits?.get(k.deck.id));
     const open = q ? true : foldOpen('deck-' + item.deck.id);
     return `<details class="subdecks" data-xfold="${esc(item.deck.id)}" ${q ? 'data-forced' : ''} ${open ? 'open' : ''}>
       <summary>${icon('layers')}<span>${plural(direct, 'subdeck')}${kids.length > direct ? ` · ${kids.length} in all` : ''}</span>${icon('chevron', 'sub-chev')}</summary>
@@ -174,7 +178,7 @@ export async function renderLibrary(el) {
       exam: (a, b) => days(a) - days(b) || due(b) - due(a),
       az: (a, b) => a.deck.name.localeCompare(b.deck.name, undefined, { sensitivity: 'base', numeric: true })
     }[view.sort];
-    const rows = top.filter(x => !q || matches(x, q) || inside(list, x.deck.id).some(k => matches(k, q)));
+    const rows = top.filter(x => !q || matches(x, q) || view.hits?.get(x.deck.id) || inside(list, x.deck.id).some(k => matches(k, q)));
     return { q, rows: compact ? rows.map((x, i) => [x, i]).sort((a, b) => by(a[0], b[0]) || a[1] - b[1]).map(a => a[0]) : rows };
   };
 
@@ -195,7 +199,7 @@ export async function renderLibrary(el) {
       <span><b class="mono">${sum('total').toLocaleString('en')}</b> cards</span>
       <a class="link" href="#/today">Today ${icon('chevron')}</a>
     </div>`}
-    ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p class="note" id="deckNone" hidden></p>`
+    ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p id="cardHits" hidden></p><p class="note" id="deckNone" hidden></p>`
     : emptyStartHTML()}
     ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards →</a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
   `;
@@ -207,11 +211,39 @@ export async function renderLibrary(el) {
     const { q, rows } = shown();
     const firstDue = view.sort === 'due' ? rows.find(x => cnt(x.deck.id).total) : null;
     grid.innerHTML = rows.map(x => tile(x, q, x === firstDue)).join('');
-    $('deckNone').hidden = rows.length > 0;
-    $('deckNone').textContent = rows.length ? '' : `No decks match “${view.query.trim()}”.`;
+    const total = view.hits ? top.reduce((n, x) => n + (view.hits.get(x.deck.id) || 0), 0) : 0;
+    const hitsP = $('cardHits');
+    hitsP.hidden = !total;
+    hitsP.innerHTML = total ? `<button class="link" type="button" id="showHits">Show ${total.toLocaleString('en')} matching ${total === 1 ? 'card' : 'cards'}</button>` : '';
+    const none = rows.length === 0 && !view.pending;
+    $('deckNone').hidden = !none;
+    $('deckNone').textContent = none ? `No decks or cards match “${view.query.trim()}”.` : '';
+  };
+  // The search also looks in the cards (front, back, tags) once you stop typing: one pass counts the matches per deck.
+  const cardPass = q => {
+    const m = cardMatcher(q);
+    if (!m) { view.pending = false; drawGrid(); return; }
+    const hits = new Map();
+    for (const c of today.allCards) if (m(c)) for (const id of chains.get(c.deckId) || []) hits.set(id, (hits.get(id) || 0) + 1);
+    if (view.query !== q) return;                     // typing went on meanwhile: that newer text has its own pass coming
+    view.hits = hits; view.pending = false;
+    drawGrid();
+    grid.dataset.searched = q;
   };
   drawGrid();
-  $('deckSearch')?.addEventListener('input', e => { view.query = e.target.value; drawGrid(); });
+  $('deckSearch')?.addEventListener('input', e => {
+    view.query = e.target.value; view.hits = null;
+    clearTimeout(searchTimer);
+    const q = view.query;
+    view.pending = q.trim().length >= 2;
+    drawGrid();
+    if (view.pending) searchTimer = setTimeout(() => cardPass(q), 200);
+    else grid.dataset.searched = q;
+  });
+  $('cardHits')?.addEventListener('click', e => {
+    if (!e.target.closest('#showHits')) return;
+    stopFold(); presetBrowse({ query: view.query.trim() }); navGo('#/browse');
+  });
   el.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => {
     view.sort = b.dataset.sort;
     try { localStorage.setItem(SORT_KEY, view.sort); } catch { /* not remembered: fine */ }
@@ -662,6 +694,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
         <p id="delMsg"><b>Delete “${esc(deck.name)}”?</b><br>${subs
           ? `It has ${plural(subs, 'subdeck')}. Deleting everything removes ${plural(total, 'card')} and all their review history; keeping the subdecks removes this deck's own ${plural(own, 'card')} and moves ${kids === 1 ? 'its subdeck' : `its ${kids} subdecks`} ${up}.`
           : `This removes ${plural(own, 'card')} and all their review history.`} You can undo this for a few seconds.</p>
+        <p class="del-copy"><button class="btn ghost small" type="button" id="delCopy">Save a copy first</button> <span class="note">The copy is a spreadsheet: text and tags only.</span></p>
         <div class="sheet-actions">
           <button class="btn ghost" type="button" id="delNo">Keep it</button>
           ${subs ? '<button class="btn danger" type="button" id="delKeep">Delete, keep subdecks</button>' : ''}
@@ -670,6 +703,17 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       </div>`;
     $('delNo').focus();
     $('delNo').addEventListener('click', () => { closeSheet(); openDeckEditor(deck, onDone); });
+    // A spreadsheet of the whole deck (subdecks too, so it covers both delete choices) saved before anything is removed.
+    $('delCopy').addEventListener('click', async () => {
+      const b = $('delCopy');
+      try {
+        const ex = await import('./export.js');
+        const cards = ex.cardsForExport(deck, decks, all.filter(c => tree.includes(c.deckId)));
+        ex.download(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'));
+        b.textContent = 'Copy saved'; b.disabled = true;
+        toast('Copy saved to your downloads');
+      } catch { toast('Could not save a copy'); }
+    });
     // Undo puts back every deck, card, schedule and review that the delete removed, and any subdeck that was moved up (db.restoreSnapshot).
     const done = snap => {
       closeSheet();

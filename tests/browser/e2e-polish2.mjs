@@ -113,13 +113,13 @@ await p.reload(); await p.waitForSelector('#deckGrid .deck');
 ok((await p.getAttribute('[data-sort=az]', 'aria-pressed')) === 'true', 'the sort is remembered on this device');
 await p.click('[data-sort=due]');
 // search
-await p.fill('#deckSearch', 'spanish'); n = await names(p);
+await p.fill('#deckSearch', 'spanish'); await p.waitForSelector('#deckGrid[data-searched="spanish"]'); n = await names(p);
 ok(n.join() === 'Spanish B1', 'search by name: ' + n.join());
-await p.fill('#deckSearch', 'biol 201'); n = await names(p);
+await p.fill('#deckSearch', 'biol 201'); await p.waitForSelector('#deckGrid[data-searched="biol 201"]'); n = await names(p);
 ok(n.join() === 'Cell Biology', 'search by course code: ' + n.join());
-await p.fill('#deckSearch', 'unit 2'); n = await names(p);
+await p.fill('#deckSearch', 'unit 2'); await p.waitForSelector('#deckGrid[data-searched="unit 2"]'); n = await names(p);
 ok(n.join() === 'Law' && await p.$eval('.subdecks', d => d.open) && (await p.$$eval('.subdecks .sd-name', r => r.map(x => x.textContent))).join() === 'Unit 2', 'a subdeck match shows its course with just that subdeck, open: ' + n.join());
-await p.fill('#deckSearch', 'zzz'); n = await names(p);
+await p.fill('#deckSearch', 'zzz'); await p.waitForSelector('#deckNone:not([hidden])'); n = await names(p);
 ok(n.length === 0 && (await p.textContent('#deckNone')).includes('zzz'), 'no match says so');
 await p.fill('#deckSearch', ''); n = await names(p);
 ok(n.length >= 6 && !(await p.$eval('.subdecks', d => d.open)), 'clearing the search brings everything back, folds as they were (a search does not remember its open folds)');
