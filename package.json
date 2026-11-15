@@ -1,6 +1,7 @@
 {
   "name": "study-sprint",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "test": "node --test",

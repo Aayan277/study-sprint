@@ -1,0 +1,26 @@
+Copyright (c) 2026 Aayan277. All rights reserved.
+
+This repository contains the source code of Study Sprint ("the Software").
+No licence is granted to copy, modify, distribute, publish or reuse the
+Software, in whole or in part, without written permission from the
+copyright holder.
+
+What is allowed without further permission:
+- Using the Study Sprint app at its published web address, under the app's
+  Terms (terms.html) and Privacy page (privacy.html).
+- Viewing the code, and forking it on GitHub, as GitHub's Terms of Service
+  allow for public repositories. A fork gives no right to use, copy or
+  distribute the code outside GitHub.
+
+Material under other licences keeps those licences:
+- third-party libraries loaded by Study Sprint;
+- the Geist font files in fonts/ (SIL Open Font License 1.1, see
+  fonts/OFL.txt);
+- the files in .claude/agents/ (MIT, see .claude/agents/LICENSE-agency-agents).
+See THIRD-PARTY-NOTICES.md.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.

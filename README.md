@@ -213,7 +213,7 @@ Everything the owner has to do before inviting other people is one checklist, cl
 
 ## Licence
 
-The licence for Study Sprint's own code has **not been decided yet**, so until it is, nobody else has permission to reuse it. The free libraries it loads keep their own licences: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Study Sprint's own code is **all rights reserved**: see [LICENSE](LICENSE). You can use the app, read the code here and fork it on GitHub, but copying, changing or reusing the code needs the owner's written permission. The free libraries it loads keep their own licences: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Running it on your computer
 
