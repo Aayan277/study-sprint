@@ -3385,3 +3385,8 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row > .switch{grid-column:1;grid-row:1;margin-top:1px}
   :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row > span{grid-column:2;grid-row:1}
 }
+
+/* 4.67 WP-B */
+.deck-counts .hit{color:var(--accent-text)}
+#cardHits{margin:0 0 var(--s-2)}
+.del-copy{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:var(--s-2) 0}
