@@ -931,3 +931,8 @@
 :root[data-ui="clinical"] .paste-only #deckSection,
 :root[data-ui="clinical"] .paste-only #pane-paste .pane-actions{display:none}
 :root[data-ui="clinical"] .paste-only-more{display:block;margin:10px 0 0;min-height:44px;color:var(--accent-text)}
+
+/* 4.67 WP-A */
+@media (min-width:1024px) and (pointer:fine){
+  :root[data-ui="clinical"] .th-done .th-extra.btn{min-height:44px}
+}

@@ -24,6 +24,13 @@ test('constants match the written rule', () => {
   assert.equal(V.MAX_AUTO_RETURNS, 2); assert.equal(V.RMSE_LIMIT, 0.01); assert.equal(V.BOOTSTRAP_RESAMPLES, 1000);
 });
 
+test('the own-verdict level is 99%', () => {
+  assert.equal(V.BOOTSTRAP_LEVEL, 0.99);
+  assert.deepEqual(V.liveVerdict(good, enough), V.liveVerdict(good, { ...enough, level: 0.99 }));
+  const r95 = V.liveVerdict(good, { ...enough, level: 0.95 }), r99 = V.liveVerdict(good, enough);
+  assert.ok(r99.lo <= r95.lo && r99.hi >= r95.hi, '99% interval contains the 95% one');
+});
+
 // ---------- verdict: the "not enough yet" edges ----------
 test('scored reviews: 999 is too few, 1000 is enough', () => {
   assert.equal(V.liveVerdict(good, { ...enough, totalScored: 999 }).status, 'few');

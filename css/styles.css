@@ -3366,3 +3366,22 @@ main h2[tabindex="-1"]{outline:none}
 .help-search{margin:0 0 14px}
 .help-search .deck-search{flex:none;width:100%;max-width:520px}
 #helpNone{margin:0 0 14px}
+
+/* 4.67 WP-A */
+@media (min-width:1024px) and (pointer:fine){
+  .btn.small{min-height:36px}
+  main[data-route="deck"] .screen-head .head-actions .btn,
+  main[data-route="deck"] .screen-head .head-actions .btn.primary{min-height:36px}
+  .more-btn{width:36px;min-height:36px}
+  :is(.sheet-foot,.savebar,.ys-add,.t-step,.occ-ed-cf-btns) .btn:not(.small){min-height:44px}
+  .sheet-foot .btn:not(.small){padding-block:8px}
+  .steps-input{align-items:center}
+}
+@media (min-width:1024px){
+  :root:not([data-ui="clinical"]) .today-hero{grid-template-columns:minmax(0,1fr) auto;justify-content:stretch}
+  :root:not([data-ui="clinical"]) .today-hero .btn.big,
+  :root:not([data-ui="clinical"]) .today-hero .th-done{justify-self:end;align-self:center}
+  :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row{grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:start}
+  :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row > .switch{grid-column:1;grid-row:1;margin-top:1px}
+  :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row > span{grid-column:2;grid-row:1}
+}
