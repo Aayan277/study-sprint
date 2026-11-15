@@ -32,6 +32,8 @@ const shortDate = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric
 
 // Remembered while the app is open, so going into a card and back keeps your search.
 const memory = { query: '', filter: 'all', sort: 'added-old' };   // oldest first = the order you added them
+// Sets what the next Browse screen starts with (the Decks search uses it to open the cards it found).
+export function presetBrowse({ query = '', filter = 'all' } = {}) { memory.query = query; memory.filter = filter; }
 
 // The filter dropdown's options, grouped (Status / Flags / Problems).
 function filterOptions(current) {

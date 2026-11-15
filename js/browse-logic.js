@@ -52,7 +52,7 @@ export const FILTERS = [
   ['review', 'Not due yet'],
   ['suspended', 'Suspended'],
   ['buried', 'Buried'],
-  ['flagged', 'Any flag'],
+  ['flagged', 'Flagged'],
   ...FLAGS.map(f => [`flag${f.id}`, `${f.name} flag`]),
   ['typing', 'Typing cards'],
   ['leech', 'Leeches'],

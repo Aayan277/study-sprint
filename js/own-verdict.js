@@ -16,6 +16,8 @@ export const EXIT_WINDOW = 1000;      // how many recent records the "go back" c
 export const MAX_AUTO_RETURNS = 2;    // after this many automatic returns to FSRS, lock
 export const RMSE_LIMIT = 0.01;       // Own may be at most this much worse on RMSE
 export const BOOTSTRAP_RESAMPLES = 1000;
+// Changed in 4.67 from 0.95: simulation showed about 11% false switches at 95% against a 5% limit, and about 3% at 99%.
+export const BOOTSTRAP_LEVEL = 0.99;
 export const BINS = 20;               // bins for the RMSE
 export const ERROR_SHARE = 0.05;      // more than 5% of plans failing means error
 export const ERROR_PAUSE_DAYS = 14;   // wait this long after an error return
@@ -83,7 +85,7 @@ function perCard(recs) {
   return [...m.keys()].sort().map(k => m.get(k));
 }
 
-// The 95% interval (or `level`) for the mean difference, by card-level bootstrap.
+// The 99% interval (BOOTSTRAP_LEVEL, or `level`) for the mean difference, by card-level bootstrap.
 function bootstrap(cards, level, seed) {
   const k = cards.length, B = BOOTSTRAP_RESAMPLES;
   const sums = Float64Array.from(cards, c => c.sum), ns = Float64Array.from(cards, c => c.n);
@@ -127,7 +129,7 @@ export function rmseBroken(rmseOwn, rmseFsrs) {
 // Is Own better than FSRS on the live records?
 //   records: the live scored records
 //   opts: { totalScored (history + live), daysWatching, nLive (live count; default records.length),
-//           level (default 0.95), seed }
+//           level (default BOOTSTRAP_LEVEL, 0.99), seed }
 // Returns { status: 'few' | 'better' | 'not', meanDiff, lo, hi, rmseOwn, rmseFsrs,
 //           llOwn, llFsrs, n, cards, need: { scored, live, days } }
 // 'few' means not enough to judge. 'better' needs the whole interval below 0
@@ -135,7 +137,7 @@ export function rmseBroken(rmseOwn, rmseFsrs) {
 // (lo/hi/rmse are null while status is 'few'.)
 export function liveVerdict(records, opts = {}) {
   const recs = clean(records);
-  const level = opts.level ?? 0.95;
+  const level = opts.level ?? BOOTSTRAP_LEVEL;
   const seed = opts.seed ?? DEFAULT_SEED;
   const totalScored = opts.totalScored ?? recs.length;
   const daysWatching = opts.daysWatching ?? 0;
