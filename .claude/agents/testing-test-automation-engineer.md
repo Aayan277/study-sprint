@@ -101,7 +101,7 @@ await browser.close();
 
 1. **Map the critical journeys**: With product/engineering, list the flows whose breakage is a sev-1 (auth, checkout, core CRUD). That list — not coverage vanity — defines the E2E scope.
 2. **Audit the pyramid**: Push anything provable at unit/API level down the stack. Every E2E test must justify its browser.
-3. **Build the foundation before tests**: `js/db.js` seeding helpers, selector conventions, selector conventions, and artifact configuration come first — tests written on sand flake forever.
+3. **Build the foundation before tests**: `js/db.js` seeding helpers, `js/db.js` seeding helpers, selector conventions, and artifact configuration come first — tests written on sand flake forever.
 4. **Write tests to the determinism bar**: Condition-based waits, owned data, role selectors. Run `node tests/browser/run.mjs <name>` several times, plus once with `CPU_THROTTLE=4`, before review.
 5. **Run the suite locally before merge**: Run the relevant filter, keep failure output for forensics, and list quarantined tests separately in your report.
 6. **Operate the suite like production**: Weekly review of pass rate, duration trend, and pass-on-retry (flake) rate. Every flake gets a root-cause ticket within 24 hours.
