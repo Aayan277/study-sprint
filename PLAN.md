@@ -7,6 +7,8 @@ The current state and what's next. Keep this file short: history goes in [CHANGE
 - Ask me before any decision that's hard to undo (data format changes, deleting features, adding a build step).
 - I'm new to coding. Explain changes in plain language, keep the code readable, and add short comments where the logic isn't obvious.
 - Keep it a **static site with no build step** so GitHub Pages can serve it directly: plain HTML, CSS and JavaScript ES modules, with libraries from a CDN at pinned versions.
+- When something is done, tell me what to test.
+- Each release adds a line to the top of CHANGELOG.md (the same words as its `js/whats-new.js` entry).
 - Day-to-day rules are in `CLAUDE.md` and the `release` skill (`.claude/skills/release`).
 
 ## Where things stand (v4.67)
@@ -14,7 +16,7 @@ The current state and what's next. Keep this file short: history goes in [CHANGE
 - Live at https://aayan277.github.io/study-sprint/ (GitHub Pages, `main` branch root). Code is all rights reserved (`LICENSE`).
 - Flashcards with FSRS scheduling (FSRS-6 is the default and the fallback), Anki/CSV/Excel/PDF import, Play games, Practice test, exam planning, stats, optional sync (Supabase).
 - Two styles: Original (`css/styles.css`) and Clinical (`css/clinical.css`), each light and dark.
-- Own model: Settings → Advanced scheduling → Own model → Load model file. It only takes over once it is better at the 99% level (`js/own-verdict.js`). Model files are never committed.
+- Own model: Settings → Study → Advanced scheduling → Own model → Load model file. It only takes over once it is better at the 99% level (`js/own-verdict.js`). Model files are never committed.
 
 ## Next
 

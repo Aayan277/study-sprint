@@ -96,5 +96,6 @@ test('the app\'s own version is not behind the newest release in CHANGELOG.md (s
   const plan = fs.readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
   const released = [...plan.matchAll(/^- \*\*v(\d+(?:\.\d+)+)[,:]/gm)].map(m => m[1]);
   assert.ok(released.length > 3, 'release notes found');
+  assert.ok(released.includes(app), `CHANGELOG.md has no entry for v${app}`);
   for (const v of released) assert.notEqual(compareVersions(app, v), -1, `APP_VERSION ${app} is behind the release note for v${v}`);
 });

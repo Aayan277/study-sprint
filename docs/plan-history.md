@@ -289,12 +289,7 @@ Later: "These look like notes" paste banner (B8), with the one-tap AI cards.
 
 ## Round 3 (plan in `docs/design/round3-plan.md`; decisions D1 and D2 approved)
 
-
-
-
-
-
-
+Release entries for this round (v4.8.1 onward) are in [CHANGELOG.md](../CHANGELOG.md).
 
 - **Practice test (released in v4.37):** a calm mock exam, separate from Play (fun timed rounds). Set up from the deck page's Practice test button (also Stats readiness, and "Take a mock exam" on Today and the deck page when an exam is within 7 days): deck and subdecks, optional tags, 10/20/30/50/All questions, a mix of multiple choice, typed, fill-in-the-blank and true/false (Play's question builder and wrong options), optional time limit (auto-submits), random or weakest-first order, and "Count answers as reviews" (off by default; same code as Play's, `js/practice-save.js`, log rows with `source: 'test'`, which every reader that special-cases `'play'` now treats the same: Today ring, stats, retention (typed only), FSRS replay, leech rule, one schedule change per card per day). One question per screen, no feedback until Submit, Previous/Next, Flag for review, a question navigator, a "Leave test?" guard, and a test in progress kept in localStorage so a reload resumes it. Results: score and time, score by tag and by subdeck, every question with your answer (Wrong only filter), Drill missed (Review on an ids queue), Retake (same or new questions). Last choices per deck and the last 10 results per deck are device settings (`testPrefs`, `testHistory`): in backups but not synced, because two devices would overwrite each other's lists. True or false answers are logged but never change the schedule (a coin flip says too little about memory; log reason `logged`). "All" stops at 200 questions. The time limit counts only while the test is open, but a hidden tab keeps counting. The answers are saved one by one (a marker per answer in the saved state), so a reload in the middle of saving carries on and never writes an answer twice; the results say "Saved to your schedule" or offer Retry. Two tabs on one test: the one that did not write last asks "Continue here". Blocked storage: the test runs from memory and cannot be resumed. Files: `js/mock-exam.js`, `-sheet.js`, `-logic.js`, `-store.js`, `js/practice-save.js` (named so `node --test` does not run them); tests `tests/mock-exam-logic.test.js`, `e2e-practicetest`.
 
