@@ -70,5 +70,5 @@ test('readAnkiFile: a failed fflate or sql.js load is no-library, not a bad file
 test('the app warms the libraries once, idle, with the checks in place', () => {
   const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
   assert.match(app, /saveAnkiLibrariesWhenIdle\(\);/);
-  assert.match(app, /shouldSaveAnkiLibraries\(\{ installed: isInstalled\(\)/);
+  assert.match(app, /isInstalled\(\) && navigator\.onLine && navigator\.serviceWorker\?\.controller && !navigator\.connection\?\.saveData\)\) return;\s+import\('\.\/anki-read\.js'\)/);
 });

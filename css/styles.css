@@ -3398,5 +3398,5 @@ main h2[tabindex="-1"]{outline:none}
 
 /* 4.68 WP-A */
 .anki-sum{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:var(--s-2) 0;font-size:var(--fs-sm)}
-.anki-sum .link{min-height:44px;padding:0 4px}
-@media (pointer:fine){.anki-sum .link{min-height:34px}}
+.anki-sum .link{min-height:44px;padding:0 4px;color:var(--accent-text);font-weight:500}
+@media (min-width:1024px) and (pointer:fine){.anki-sum .link{min-height:36px}}

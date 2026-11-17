@@ -390,7 +390,7 @@ function wireFile() {
   });
 }
 
-const noLibraryWhy = () => navigator.onLine ? "The Anki reader didn't download. Check your connection and try again." : 'Anki files need an internet connection the first time.';
+const noLibraryWhy = () => navigator.onLine ? "The Anki reader didn't download. Check your connection, or close and reopen the app, then try again." : 'Anki files need an internet connection the first time.';
 
 // A whole-app backup is restored from Settings (it replaces everything), not added as cards.
 async function explainJson(file) {
@@ -1083,7 +1083,7 @@ function refreshFlags() {
       fields: S.hasFields ? S.keepFields : undefined,
       reverse: reversible ? S.makeReverse : undefined,
       subdecks: subs.size ? $('ankiSubs').checked : undefined,
-      update: oldN ? { on: S.updateOld, safe: kinds.safe, old: oldN } : null,
+      update: oldN ? { on: S.updateOld, changed: kinds.safe + (S.overwriteEdited ? kinds.edited : 0), old: oldN } : null,
     });
   }
   if (missing) parts.push(`<span class="warn">${plural(missing, 'row')} missing a side will be skipped.</span>`);

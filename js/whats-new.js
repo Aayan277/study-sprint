@@ -11,7 +11,7 @@ export const NOTES = [
   { version: '4.68', items: [
     'Anki import shows one line saying what comes along, with Change to see the options.',
     'Once installed, the app can open Anki files offline after it has been online once.',
-    'Add exam date on Today is one button, and tag: searches on Decks now count matching cards.',
+    'Add exam date on Today is one button, and searching by tag on Decks now counts matching cards.',
   ] },
   { version: '4.67', items: [
     'Searching on the Decks screen now finds cards too, and deleting a deck offers to save a copy first.',

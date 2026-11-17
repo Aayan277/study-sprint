@@ -369,8 +369,9 @@ function tidyMediaWhenIdle() {
 // Installed app, online, idle: save the Anki reader libraries once so Anki files open offline later (js/anki-read.js).
 function saveAnkiLibrariesWhenIdle() {
   const run = () => {
+    // The same cheap test as shouldSaveAnkiLibraries (anki-read.js), done here first so a device that fails it never loads that file.
+    if (!(isInstalled() && navigator.onLine && navigator.serviceWorker?.controller && !navigator.connection?.saveData)) return;
     import('./anki-read.js').then(m => {
-      if (!m.shouldSaveAnkiLibraries({ installed: isInstalled(), online: navigator.onLine, controlled: !!navigator.serviceWorker?.controller, saveData: !!navigator.connection?.saveData })) return;
       return m.saveAnkiLibraries();
     }).catch(() => {});
   };

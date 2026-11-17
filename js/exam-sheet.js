@@ -60,6 +60,7 @@ export async function openExamSheet(deckId, onDone = () => {}, { choices = null 
     <h2 id="sheetTitle">${many ? 'Add exam date' : `${esc(deck.name)} exam`}</h2>
     <form id="xdForm" class="sheet-in" style="padding:0" novalidate>
       ${many ? `<label class="field"><span>Deck</span><select id="xdDeck">${pick.map(d => `<option value="${esc(d.id)}"${d.id === deck.id ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
+      <!-- the date default comes from the first deck and does not change when the Deck dropdown does -->
       <label class="field"><span>Exam date</span>
         <input id="xdDate" class="exam-date" type="date" min="${isoIn(0)}" value="${esc(deck.examDate && !examDateError(deck.examDate) ? deck.examDate : isoIn(14))}" required></label>
       <div class="exam-quick" role="group" aria-label="Quick dates">

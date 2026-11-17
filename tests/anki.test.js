@@ -669,9 +669,10 @@ test('optionsSummary: the line above the Anki import switches', () => {
   assert.equal(optionsSummary({ history: true }), 'Keeps review history');
   assert.equal(optionsSummary({ pictures: true, history: false }), 'Keeps pictures · Leaves out review history');
   // a re-import
-  assert.equal(optionsSummary({ pictures: true, update: { on: true, safe: 3, old: 4 } }), 'Keeps pictures · Updates 3 cards you already have');
-  assert.equal(optionsSummary({ update: { on: true, safe: 1, old: 1 } }), 'Updates 1 card you already have');
-  assert.equal(optionsSummary({ history: true, update: { on: false, safe: 3, old: 3 } }), 'Keeps review history · Adds 3 cards you already have again');
+  assert.equal(optionsSummary({ pictures: true, update: { on: true, changed: 3, old: 4 } }), 'Keeps pictures · Updates 3 cards you already have');
+  assert.equal(optionsSummary({ update: { on: true, changed: 1, old: 1 } }), 'Updates 1 card you already have');
+  assert.equal(optionsSummary({ update: { on: true, changed: 0, old: 2 } }), 'Skips 2 cards you already have');
+  assert.equal(optionsSummary({ history: true, update: { on: false, changed: 0, old: 3 } }), 'Keeps review history · Adds a second copy of 3 cards you already have');
   // nothing applicable
   assert.equal(optionsSummary({}), '');
   assert.equal(optionsSummary(), '');

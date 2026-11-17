@@ -11,9 +11,10 @@ page.on('pageerror', e => errors.push('pageerror ' + e.message));
 page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const open = async file => {
+  await page.goto('about:blank');          // (a same-page hash change would keep the last file's text on screen)
   await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
-  await page.waitForFunction(() => /Found \d+ card/.test(document.querySelector('#found')?.textContent || ''), null, { timeout: 30000 });
+  await page.waitForFunction(f => document.getElementById('fileName')?.textContent === f && /Found \d+ card/.test(document.querySelector('#found')?.textContent || ''), file, { timeout: 30000 });
 };
 
 await open('anki-sched-new.apkg');
@@ -70,9 +71,9 @@ await open('anki-new.apkg');
 ok(/^Keeps pictures/.test(await page.textContent('#ankiSumText')), 'a deck with pictures says so: ' + await page.textContent('#ankiSumText'));
 
 // A CSV import has no summary, and its rows are not behind Change.
-await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file');
+await page.goto('about:blank'); await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file');
 await page.click('#tab-file'); await page.setInputFiles('#fileIn', SP + '/files/quizlet.txt');
-await page.waitForFunction(() => /Found \d+ card/.test(document.querySelector('#found')?.textContent || ''), null, { timeout: 30000 });
+await page.waitForFunction(f => document.getElementById('fileName')?.textContent === f && /Found \d+ card/.test(document.querySelector('#found')?.textContent || ''), 'quizlet.txt', { timeout: 30000 });
 ok(!(await page.isVisible('#ankiSum')), 'a text import has no summary line');
 ok(await page.evaluate(() => !document.getElementById('importOpts').hidden), 'and its switch area is not hidden');
 await open('anki-reversed-new.apkg');

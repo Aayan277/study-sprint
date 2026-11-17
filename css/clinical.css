@@ -940,4 +940,4 @@
 /* 4.68 WP-A */
 :root[data-ui="clinical"] .anki-sum{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:var(--s-2) 0;font-size:var(--fs-sm)}
 :root[data-ui="clinical"] .anki-sum .link{min-height:44px;padding:0 4px;border-radius:0;color:var(--accent-text)}
-@media (pointer:fine){:root[data-ui="clinical"] .anki-sum .link{min-height:34px}}
+@media (min-width:1024px) and (pointer:fine){:root[data-ui="clinical"] .anki-sum .link{min-height:36px}}
