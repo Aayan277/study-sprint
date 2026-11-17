@@ -19,7 +19,7 @@ ok((await page.textContent('.tab[aria-current=page]')).trim() === 'Today', 'Toda
 ok(JSON.stringify(await page.$$eval('.tab', t => t.map(x => x.textContent.trim()))) === '["Today","Decks","Play","Stats"]', 'tabs: Today, Decks, Play, Stats');
 ok((await page.getAttribute('#startBtn', 'aria-label')).includes('12 cards') && (await page.getAttribute('#startBtn', 'aria-label')).includes('min'), 'Start shows 12 cards and a time estimate');
 ok(+(await page.textContent('[data-count=new]')) === 12 && +(await page.textContent('[data-count=due]')) === 0, 'counts: 12 new, 0 due');
-ok((await page.textContent('.streak')).includes('0') && !(await page.textContent('.streak')).includes('Study today'), 'no streak yet');
+ok(await page.locator('.today-hero .streak').count() === 0, 'no streak yet: the streak is hidden while it is 0');
 ok(await page.evaluate(() => { const g = document.querySelector('.today-hero .goal'); return !!g && getComputedStyle(g).display === 'none'; }), "Original: Today's goal line (Clinical's) is in the page but hidden");
 await noHScroll('today'); await page.screenshot({ path: SP + '/t-today.png', fullPage: true });
 

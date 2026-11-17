@@ -48,7 +48,7 @@ const deckId = await p.evaluate(async () => (await (await import('./js/db.js')).
 ok(href === '#/import/' + deckId, 'the button opens Import with Cell Biology chosen');
 await p.click('#wlGo'); await p.waitForSelector('.today-hero');
 const row = await p.evaluate(() => { const r = [...document.querySelectorAll('.tdeck')].find(x => x.textContent.includes('Cell Biology')); return { cls: r.className, t: r.textContent, href: r.getAttribute('href'), tick: !!r.querySelector('.td-go .ico[viewBox] path[d="M5 12.5l4.5 4.5L19 7.5"]') }; });
-ok(/fr-emptydeck/.test(row.cls) && !/done/.test(row.cls) && /Add cards/.test(row.t) && /No cards yet/.test(row.t) && !row.tick, 'an empty course on Today shows "+ Add cards", not a green done tick');
+ok(/fr-emptydeck/.test(row.cls) && !/done/.test(row.cls) && !/Add cards/.test(row.t) && /No cards yet/.test(row.t) && !row.tick, 'an empty course on Today says "No cards yet" (no Add cards pill), not a green done tick');
 ok(row.href === '#/import/' + deckId, 'and it links to Import for that course');
 await p.context().close();
 
