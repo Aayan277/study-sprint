@@ -1,5 +1,5 @@
 // Round 5 UI changes: 3 deck page Review first (PC), 5 sheet "Answer" label on its own line, 7 Help page 760px (PC),
-// 8 finish links 44px (phone), 9 "N more in Decks" 44px (phone), 10 onboarding Skip 44px (phone), 11 Clinical exam rows visible (PC).
+// 8 finish links 44px (phone), 9 "Add exam date" button 44px (phone), 10 onboarding Skip 44px (phone), 11 Clinical exam rows visible (PC).
 // Also checks the unapproved ideas did not change: sidebar stripes, deck code colour, sticky rating bar gradient, "All started" word.
 // Run with: node tests/browser/run.mjs ui-r5
 import { chromium, realChromium } from './pw.mjs';
@@ -70,9 +70,9 @@ const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect();
 {
   const p = await open(PHONE, true);
   await seed(p, 6);
-  const more = await p.$('.exam-add .link');
-  ok(!!more, '9: the "N more in Decks" link is on Today');
-  if (more) { const b = await box(p, '.exam-add .link'); ok(b.h >= 43.9, '9: "N more in Decks" is at least 44px tall (' + b.h + ')'); }
+  const more = await p.$('#addExamBtn');
+  ok(!!more, '9: the "Add exam date" button is on Today');
+  if (more) { const b = await box(p, '#addExamBtn'); ok(b.h >= 43.9, '9: "Add exam date" is at least 44px tall (' + b.h + ')'); }
   await go(p, '#/browse', '#brAdd');
   await p.tap('#brAdd'); await p.waitForSelector('.answer-mode');
   const chips = await p.$$eval('.answer-mode .chip', cs => cs.map(c => Math.round(c.getBoundingClientRect().y)));
