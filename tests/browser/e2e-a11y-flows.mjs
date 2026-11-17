@@ -293,11 +293,12 @@ ok(await attr('#syncPw', 'autocomplete') === 'new-password' && await attr('#sync
 
 // ---------- 10. Stats: pick a day ----------
 await page.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards'))[0]; const t = Date.now() - 3 * 86400000;
-  for (let i = 0; i < 5; i++) await db.addLog({ cardId: c.id, timestamp: t + i * 60000, source: 'review', correct: true, rating: 3, ms: 3000, state: 2 }); });
+  for (let i = 0; i < 5; i++) await db.addLog({ cardId: c.id, timestamp: t + i * 60000, source: 'review', correct: true, rating: 3, ms: 3000, state: 2 });
+  for (const d of [5, 6]) await db.addLog({ cardId: c.id, timestamp: Date.now() - d * 86400000, source: 'review', correct: true, rating: 3, ms: 3000, state: 2 }); });   // (the calendar card shows from 3 days with answers)
 await page.goto(URL + '#/stats'); await page.waitForSelector('#calPick');
 const day = await page.evaluate(async () => { const { dayKey } = await import('./js/stats-calc.js'); return dayKey(Date.now() - 3 * 86400000); });
-await page.focus('#calPick');
-ok(await active() === 'calPick', 'Calendar: the day picker takes focus from the keyboard');
+await page.focus('#calPickBtn');
+ok(await active() === 'calPickBtn' && await attr('#calPickBtn', 'aria-label') === 'Pick a day', 'Calendar: the Pick a day button takes focus from the keyboard');
 await page.fill('#calPick', day);
 ok((await page.textContent('#calInfo')).includes('5 answers'), 'Calendar: picking a day reads out its answers (' + (await page.textContent('#calInfo')) + ')');
 ok(await page.locator('#calGrid i.sel').count() === 1, 'Calendar: the picked square is marked');

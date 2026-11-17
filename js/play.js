@@ -8,7 +8,6 @@
 // schedule following the auto-grading rules in autograde.js.
 
 import * as db from './db.js';
-import { helpLink } from './help.js';
 import { loneIds, unpaired } from './reverse.js';
 import {
   questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
@@ -187,9 +186,9 @@ export async function renderPlay(el) {
 
       <fieldset><legend>Format</legend>
         <div class="modes three">
-          ${[['classic', `${prefs.len} Q`], ['survival', '<span class="hearts" aria-hidden="true">●●●</span>'], ['lightning', '<span class="clock">1:00</span>']].map(([v, ex]) => `
+          ${[['classic', `${prefs.len} questions`], ['survival', `${LIVES} lives`], ['lightning', '60 seconds']].map(([v, ex]) => `
             <label class="mode"><input type="radio" name="fmt" value="${v}" ${prefs.fmt === v ? 'checked' : ''}>
-              <span class="mode-ex">${ex}</span><span class="mode-name">${FORMATS[v]}</span></label>`).join('')}
+              <span class="mode-name">${FORMATS[v]}</span><span class="mode-ex">${ex}</span></label>`).join('')}
         </div>
       </fieldset>
 
@@ -231,7 +230,6 @@ export async function renderPlay(el) {
       <div class="start-row">
         <button class="btn primary" type="button" id="startBtn">Start round</button>
         ${best ? `<span class="mode-best">Best <b class="mono">${best.toLocaleString()}</b></span>` : ''}
-        ${helpLink('play-scoring', '?', 'How scoring works in Play')}
       </div>
       `}`;
 

@@ -100,11 +100,12 @@ for (const [w, h] of [[375, 812], [1440, 900]]) {
     ok(g.right <= g.panelLeft, `${w}px: the toast stays left of the open side panel (${Math.round(g.right)} <= ${Math.round(g.panelLeft)})`);
   }
 
-  // Stats: the "Pick a day" box shows a focus ring
-  await go(p, '#/stats', '#calPick');
-  for (let i = 0; i < 40 && await p.evaluate(() => document.activeElement?.id !== 'calPick'); i++) await p.keyboard.press('Tab');
-  const ring = await p.$eval('#calPick', e => { const s = getComputedStyle(e); return s.outlineStyle + ' ' + s.outlineWidth + ' ' + e.matches(':focus-visible'); });
-  ok(/^(solid|auto) [1-9]/.test(ring) && /true$/.test(ring), `${w}px: #calPick has a visible focus ring (${ring})`);
+  // Stats: the "Pick a day" button shows a focus ring (the calendar card needs 3 days with answers)
+  await p.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards'))[0]; for (let i = 1; i <= 3; i++) await db.addLog({ cardId: c.id, timestamp: Date.now() - i * 86400000, source: 'review', correct: true, rating: 3, ms: 3000, state: 2 }); });
+  await go(p, '#/stats', '#calPickBtn');
+  for (let i = 0; i < 40 && await p.evaluate(() => document.activeElement?.id !== 'calPickBtn'); i++) await p.keyboard.press('Tab');
+  const ring = await p.$eval('#calPickBtn', e => { const s = getComputedStyle(e); return s.outlineStyle + ' ' + s.outlineWidth + ' ' + e.matches(':focus-visible'); });
+  ok(/^(solid|auto) [1-9]/.test(ring) && /true$/.test(ring), `${w}px: #calPickBtn has a visible focus ring (${ring})`);
   await ctx.close();
 }
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
