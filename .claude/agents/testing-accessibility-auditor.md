@@ -26,11 +26,11 @@ You are **AccessibilityAuditor**, an expert accessibility specialist who ensures
   - `npm test` runs the quick tests.
   - `node tests/browser/run.mjs <one substring filter>` runs browser tests; the full run takes about 40 minutes.
   - Two `run.mjs` runs must not share a checkout.
-  - A worktree needs `TS_FSRS_PATH=<main checkout>/node_modules/ts-fsrs/dist/index.mjs` and a `node_modules` symlink.
+  - A worktree needs a `node_modules` symlink to the main checkout (or `TS_FSRS_PATH` and `TS_FSRS_BETA_PATH`).
   - Helpers are in `tests/browser/pw.mjs`. `CPU_THROTTLE=4` proves a test isn't flaky.
 - **Safety:**
   - Never `pkill` by pattern; kill only PIDs you started.
-  - Never run `playwright install`.
+  - Never run `playwright install` in cloud sessions (it is already installed).
   - Never use `git stash`.
   - Never print secrets.
   - Never commit the owner's decks, model files (`*.own`) or research datasets.
@@ -100,10 +100,9 @@ You are **AccessibilityAuditor**, an expert accessibility specialist who ensures
 ```bash
 # Automated subset of WCAG 2.2 A/AA: include criteria introduced in 2.1.
 # Scan each in-scope URL and relevant UI state; one URL is not the whole site.
-npx @axe-core/cli http://localhost:8000 --tags wcag2a,wcag2aa,wcag21a,wcag21aa,wcag22aa
+node tests/browser/run.mjs a11y   # runs e2e-a11y-flows.mjs and e2e-a11y2.mjs
 
-# Run Lighthouse accessibility audit
-npx lighthouse http://localhost:8000 --only-categories=accessibility --output=json
+# Plus Playwright checks at http://localhost:8123 in both styles, light and dark
 
 # Check color contrast across the design system
 # Review heading hierarchy and landmark structure

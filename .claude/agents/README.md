@@ -11,4 +11,4 @@ Four helper agents, each with a "This project" section holding Study Sprint's ru
 
 Planning uses the built-in Plan agent on Opus.
 
-Adapted from [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents) (MIT licence, see LICENSE-agency-agents). The other twelve imported agents were removed in November 2026 because they were generic (React, editor plugins, playful copy) and didn't know this project's rules.
+Adapted from [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents) (MIT licence, see LICENSE-agency-agents). The other eleven imported agents were removed in November 2026 because they were generic (React, editor plugins, playful copy) and didn't know this project's rules.
