@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, accentTitle } from './themes.js';
 import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
-import { initInstall } from './install.js';
+import { initInstall, isInstalled } from './install.js';
 import { initPanelResize } from './panel-resize.js';
 import { takeDraft } from './import-draft.js';
 import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty } from './ui.js';
@@ -366,6 +366,18 @@ function tidyMediaWhenIdle() {
   else setTimeout(run, 3000);
 }
 
+// Installed app, online, idle: save the Anki reader libraries once so Anki files open offline later (js/anki-read.js).
+function saveAnkiLibrariesWhenIdle() {
+  const run = () => {
+    import('./anki-read.js').then(m => {
+      if (!m.shouldSaveAnkiLibraries({ installed: isInstalled(), online: navigator.onLine, controlled: !!navigator.serviceWorker?.controller, saveData: !!navigator.connection?.saveData })) return;
+      return m.saveAnkiLibraries();
+    }).catch(() => {});
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 15000 });
+  else setTimeout(run, 5000);
+}
+
 // The server can name the oldest version allowed to sync (js/app-config.js). Asked once, after the first screen, only when signed in (a device that
 // never syncs has nothing to protect and sends nothing). Any problem with the question means "no minimum".
 async function checkMinClient() {
@@ -438,6 +450,7 @@ async function start() {
   initBadge();          // the due count on the app icon, when the person turned it on (badge.js)
   if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
   tidyMediaWhenIdle();
+  saveAnkiLibrariesWhenIdle();
   checkMinClient().catch(err => console.error(err));
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.
   if (!resetShown) { const kept = keptResetLink(); if (kept) showResetLink(kept); }
