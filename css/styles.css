@@ -3391,3 +3391,6 @@ main h2[tabindex="-1"]{outline:none}
 #cardHits{margin:0 0 var(--s-2)}
 #cardHits .link{color:var(--accent-text);font-weight:500;font-size:var(--fs-sm);padding:0;min-height:44px;text-align:left}
 .del-copy{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:var(--s-2) 0}
+/* 4.68 WP-C */
+#cardHits{margin:0}
+#cardHits > span:not(:empty){display:block;margin:0 0 var(--s-2)}

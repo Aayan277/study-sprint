@@ -5,7 +5,7 @@ import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, sav
 import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
-import { isHidden, cardMatcher, prefoldIdle } from './browse-logic.js';
+import { isHidden, searchCards, prefoldIdle } from './browse-logic.js';
 import { mountBrowser, presetBrowse } from './browse.js';
 import { examInfo, countdown, badgeNear, MOCK_DAYS } from './exam.js';
 import { drawSidebar } from './sidebar.js';
@@ -200,21 +200,21 @@ export async function renderLibrary(el) {
       <span><b class="mono">${sum('total').toLocaleString('en')}</b> cards</span>
       <a class="link" href="#/today">Today ${icon('chevron')}</a>
     </div>`}
-    ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p id="cardHits" aria-live="polite" hidden></p><p class="note" id="deckNone" hidden></p>`
+    ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p id="cardHits"><span id="cardHitsLive" aria-live="polite"></span></p><p class="note" id="deckNone" hidden></p>`
     : emptyStartHTML()}
     ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards →</a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
   `;
 
   // The tiles are drawn from the search text and the sort, so both just redraw this part.
-  const grid = $('deckGrid'), hitsP = $('cardHits'), noneP = $('deckNone');
+  const grid = $('deckGrid'), hitsLive = $('cardHitsLive'), noneP = $('deckNone');
   const drawGrid = () => {
     if (!grid?.isConnected) return;
     const { q, rows } = shown();
     const firstDue = view.sort === 'due' ? rows.find(x => cnt(x.deck.id).total) : null;
     grid.innerHTML = rows.map(x => tile(x, q, x === firstDue)).join('');
     const total = view.hits ? top.reduce((n, x) => n + (view.hits.get(x.deck.id) || 0), 0) : 0;
-    hitsP.hidden = !total;
-    hitsP.innerHTML = total ? `<button class="link" type="button" id="showHits">Show ${total.toLocaleString('en')} matching ${total === 1 ? 'card' : 'cards'}</button>` : '';
+    const html = total ? `<button class="link" type="button" id="showHits">Show ${total.toLocaleString('en')} matching ${total === 1 ? 'card' : 'cards'}</button>` : '';
+    if (hitsLive && hitsLive.dataset.src !== html) { hitsLive.dataset.src = html; hitsLive.innerHTML = html; }      // only when it changed, so sort clicks are not announced again
     const none = rows.length === 0 && !view.pending;
     noneP.hidden = !none;
     noneP.textContent = none ? `No decks or cards match “${view.query.trim()}”.` : '';
@@ -222,7 +222,7 @@ export async function renderLibrary(el) {
   // The search also looks in the cards (front, back, tags) once you stop typing: one pass counts the matches per deck.
   const cardPass = q => {
     if (!grid?.isConnected) return;
-    const m = cardMatcher(q);
+    const m = searchCards(q);
     if (!m) { view.pending = false; drawGrid(); return; }
     const hits = new Map();
     for (const c of today.allCards) if (m(c)) for (const id of chains.get(c.deckId) || []) hits.set(id, (hits.get(id) || 0) + 1);
@@ -236,7 +236,7 @@ export async function renderLibrary(el) {
     view.query = e.target.value; view.hits = null;
     clearTimeout(searchTimer);
     const q = view.query;
-    view.pending = q.trim().length >= 2 && !/tag:/i.test(q);      // (a tag: search is not counted: Browse reads it differently)
+    view.pending = q.trim().length >= 2 && !!searchCards(q);
     drawGrid();
     if (view.pending) searchTimer = setTimeout(() => cardPass(q), 200);
     else grid.dataset.searched = q;

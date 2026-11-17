@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cardStatus, browseCards, isHidden, isBuried, buryUntil, parseTags, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag } from '../js/browse-logic.js';
+import { cardStatus, browseCards, isHidden, isBuried, buryUntil, parseTags, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, searchCards } from '../js/browse-logic.js';
 import * as leechFns from '../js/browse-logic.js';
 import { dayEnd } from '../js/days.js';
 
@@ -323,4 +323,19 @@ test('typing filter: with a predicate it follows the deck default; without one i
   assert.deepEqual(ids2(browseCards(cs, new Map(), { filter: 'typing', sort: 'added-old' })), ['a']);
   assert.deepEqual(ids2(browseCards(cs, new Map(), { filter: 'typing', sort: 'added-old', typing: c => c.typeIn !== false })), ['a', 'b']);
   assert.equal(browseCards(cs, new Map(), { filter: 'all' }).length, 3);
+});
+
+test('searchCards: the same cards browseCards finds with the All filter', () => {
+  const cards = [
+    card('a', { tags: ['bio'] }), card('b', { tags: ['bio::cell'] }), card('c', { tags: ['#uworld::step'], front: 'lung nodule' }),
+    card('d', { tags: ['my tag'], front: 'plain word here' }), card('e', { tags: ['#uworld::step'], front: 'kidney' }), card('f')
+  ];
+  for (const query of ['tag:bio', 'tag:#uworld::step lung', 'tag:"my tag"', 'word', 'TAG:Bio', 'tag:bio::cell']) {
+    const test = searchCards(query);
+    const want = browseCards(cards, new Map(), { query, filter: 'all', now: NOW }).map(x => x.card.id).sort();
+    assert.deepEqual(cards.filter(test).map(c => c.id).sort(), want, query);
+    if (query !== 'tag:"my tag"') assert.ok(want.length > 0, query + ' finds something');   // (tags can't hold spaces, so a quoted one matches nothing, in both)
+  }
+  assert.equal(searchCards(''), null);
+  assert.equal(searchCards('tag:'), null);
 });

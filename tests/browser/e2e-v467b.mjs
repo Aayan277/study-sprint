@@ -39,7 +39,7 @@ const reload = async p => { await p.reload(); await p.waitForSelector('#deckGrid
 {
   const { ctx, p } = await open(390, 844); await seed(p); await reload(p);
   await p.fill('#deckSearch', 'm'); await p.waitForTimeout(500);
-  ok(await p.getAttribute('#deckGrid', 'data-searched') === 'm' && await p.$eval('#cardHits', e => e.hidden), 'one letter does not run the card search');
+  ok(await p.getAttribute('#deckGrid', 'data-searched') === 'm' && !await p.$('#showHits') && await p.$eval('#cardHitsLive', e => !e.textContent), 'one letter does not run the card search');
   await p.fill('#deckSearch', 'mitochon'); await p.waitForSelector('#deckGrid[data-searched="mitochon"]');
   ok((await names(p)).join() === 'Cell Biology', 'card text finds its deck: ' + (await names(p)).join());
   ok((await p.textContent('#deckGrid .deck-counts .hit')).trim() === '1 matching', 'tile says "1 matching"');
