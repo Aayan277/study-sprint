@@ -145,8 +145,8 @@ jobs:
               echo "**What happens at 100%:** for data and for pictures and sounds, the app's safety limits (the \"fuses\") refuse anything new, so people see \"server full\" when syncing or adding pictures, until space is freed or you move to Pro. If the whole database passes 500 MB, Supabase makes the project read-only for everyone."
               echo
               echo "**What to do** (pick one):"
-              echo "1. **Give each person less space.** Lower the default limits so a few heavy users can't fill everything: backlog item 20 in PLAN.md, and the one-line change in docs/sync-setup.md, step 2c. You can also look at who is using the most with supabase/owner.sql (run it in the Supabase SQL Editor, not here)."
-              echo "2. **Move to the Pro plan** (backlog items 7 and 20 in PLAN.md). Then raise the two fuses by editing the two rows in Table Editor → global_limits (docs/sync-setup.md, step 2c)."
+              echo "1. **Give each person less space.** Lower the default limits so a few heavy users can't fill everything: backlog item 20 in docs/backlog.md, and the one-line change in docs/sync-setup.md, step 2c. You can also look at who is using the most with supabase/owner.sql (run it in the Supabase SQL Editor, not here)."
+              echo "2. **Move to the Pro plan** (backlog items 7 and 20 in docs/backlog.md). Then raise the two fuses by editing the two rows in Table Editor → global_limits (docs/sync-setup.md, step 2c)."
               echo
               echo "**Check by hand (the check can't see this):** downloads (\"egress\"). The free plan allows 5 GB a month. In Supabase open **Project Settings → Usage** and look at **Egress**; if it's over about 4 GB before the month is out, treat it like the limits above (backlog item 16)."
               echo

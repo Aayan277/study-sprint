@@ -205,7 +205,7 @@ Smaller modules, such as the practice test, Suggest cards and Suggest tags, say 
 | `tests/*.test.js` | Tests for every rule above that doesn't need a browser |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and installing as an app |
 
-The full plan, including what's planned next and the v3.0 redesign, is in [PLAN.md](PLAN.md). What changed in each release is in `js/whats-new.js` (also shown in the app: Settings → About → See what’s new).
+The current plan and what's next is in [PLAN.md](PLAN.md); per-release notes are in [CHANGELOG.md](CHANGELOG.md), and the original plan and older history in [docs/plan-history.md](docs/plan-history.md). What changed in each release is in `js/whats-new.js` (also shown in the app: Settings → About → See what’s new).
 
 ## Before you share it
 
