@@ -1,7 +1,7 @@
 // Checking a typed answer against the back of a card. Used by typed review now and by Play later.
 // Pure functions, tested by tests/match.test.js.
 //
-// The rules (from PLAN.md):
+// The rules (from the original plan, now docs/plan-history.md):
 //   - ignore capitals, punctuation and a leading "the", "a" or "an"
 //   - allow typos scaled by length: 0 for answers under 5 characters, 1 for 5 to 9, 2 for 10 or more
 //   - accept any alternate in the back separated by ; or /

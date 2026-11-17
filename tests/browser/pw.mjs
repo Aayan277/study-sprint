@@ -25,7 +25,7 @@ function watchCsp(ctx) {
   // Settings keeps its "More settings" folds closed for a new visitor and remembers what you opened. Most tests are about the
   // controls inside them, so every window starts with those folds open (set NO_OPEN_FOLDS=1 to see the real first visit).
   if (!process.env.NO_OPEN_FOLDS) ctx.addInitScript(() => {
-    try { for (const k of ['moreAppear', 'moreStudy', 'moreData', 'moreSync']) if (localStorage.getItem('study-sprint-fold-settings-' + k) === null) localStorage.setItem('study-sprint-fold-settings-' + k, '1'); } catch { /* no storage */ }
+    try { for (const k of ['settings-moreAppear', 'settings-moreStudy', 'settings-moreData', 'settings-moreSync', 'import-anki']) if (localStorage.getItem('study-sprint-fold-' + k) === null) localStorage.setItem('study-sprint-fold-' + k, '1'); } catch { /* no storage */ }
   }).catch(() => {});
   ctx.addInitScript(() => {
     document.addEventListener('securitypolicyviolation', e => console.error(`CSP-VIOLATION ${e.violatedDirective} blocked ${e.blockedURI} at ${e.sourceFile || document.URL}:${e.lineNumber}`));

@@ -1,6 +1,6 @@
 // Setting a deck's exam date, shared by every place that does it:
 //   - Edit deck (decks.js) saves through commitDeck()
-//   - the short "exam" sheet (openExamSheet), opened from Today's "Add exam date" chips and from a deck's page,
+//   - the short "exam" sheet (openExamSheet), opened from Today's "Add exam date" button (with a Deck dropdown) and from a deck's page,
 //     saves through the same commitDeck(), so the same things happen: cards scheduled after the exam are brought
 //     forward (pullIn in exam.js), and the same date check runs (examDateError).
 
@@ -49,13 +49,18 @@ const isoIn = (n, from = new Date(dayStart())) => {
 const PRESETS = [['In 1 week', 7], ['In 2 weeks', 14], ['In 4 weeks', 28]];
 
 // The short sheet: a date box with presets, and one button. onDone(saved) runs after saving.
-export async function openExamSheet(deckId, onDone = () => {}) {
+// `choices` (deck ids) adds a Deck dropdown, for Today's single button; deckId is the one preselected.
+export async function openExamSheet(deckId, onDone = () => {}, { choices = null } = {}) {
   const decks = await db.getDecks();
   const deck = decks.find(d => d.id === deckId);
   if (!deck) return;
+  const pick = (choices || [deckId]).map(id => decks.find(d => d.id === id)).filter(Boolean);
+  const many = pick.length > 1;
   openSheet(`
-    <h2 id="sheetTitle">${esc(deck.name)} exam</h2>
+    <h2 id="sheetTitle">${many ? 'Add exam date' : `${esc(deck.name)} exam`}</h2>
     <form id="xdForm" class="sheet-in" style="padding:0" novalidate>
+      ${many ? `<label class="field"><span>Deck</span><select id="xdDeck">${pick.map(d => `<option value="${esc(d.id)}"${d.id === deck.id ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
+      <!-- the date default comes from the first deck and does not change when the Deck dropdown does -->
       <label class="field"><span>Exam date</span>
         <input id="xdDate" class="exam-date" type="date" min="${isoIn(0)}" value="${esc(deck.examDate && !examDateError(deck.examDate) ? deck.examDate : isoIn(14))}" required></label>
       <div class="exam-quick" role="group" aria-label="Quick dates">
@@ -76,12 +81,13 @@ export async function openExamSheet(deckId, onDone = () => {}) {
     const value = $('xdDate').value;
     const problem = value ? examDateError(value) : 'Pick an exam date.';
     if (problem) { showFieldError($('xdDate'), $('xdErr'), problem); return; }
-    const saved = { ...deck, examDate: value };
+    const target = many ? (pick.find(d => d.id === $('xdDeck').value) || deck) : deck;
+    const saved = { ...target, examDate: value };
     saving = true;
     let moved;
     try { ({ moved } = await commitDeck(saved, decks)); } catch (err) { saving = false; throw err; }
     closeSheet();
-    toast(`${deck.name}: ${countdown(examInfo(saved)).toLowerCase()}${moved ? `. ${plural(moved, 'card')} brought forward to before it` : ''}`);
+    toast(`${target.name}: ${countdown(examInfo(saved)).toLowerCase()}${moved ? `. ${plural(moved, 'card')} brought forward to before it` : ''}`);
     onDone(saved);
   });
 }

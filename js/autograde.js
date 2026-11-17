@@ -1,7 +1,7 @@
 // Auto-grading: turning Play answers into review ratings, so games feed the spaced-repetition
 // schedule without rating every card by hand. Pure functions, tested by tests/autograde.test.js.
 //
-// The rules (from PLAN.md):
+// The rules (from the original plan, now docs/plan-history.md):
 //
 //   Result                                      Typing   Multiple choice
 //   Wrong or timed out                          Again    Again

@@ -1,7 +1,7 @@
 // What the Practice test remembers (the rules for it are in mock-exam-logic.js).
 //   the test in progress   localStorage, written at every change (it is synchronous, so a reload right after an answer keeps it)
 //   last choices per deck, results history   the settings "testPrefs" and "testHistory": kept on this device and in backup
-//                          files, but not synced (see PLAN.md, v4.37: two devices would overwrite each other's lists)
+//                          files, but not synced (see CHANGELOG.md, v4.37: two devices would overwrite each other's lists)
 // Every storage call is wrapped: private windows and blocked storage must not break the test (it just can't be resumed).
 
 import * as db from './db.js';

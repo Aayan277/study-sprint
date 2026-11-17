@@ -2,6 +2,7 @@
 
 One entry per release, newest first. Up to v4.58 these are the detailed notes that used to live in PLAN.md; from v4.59 they are the short notes from `js/whats-new.js` (the app shows those under Settings → About → See what’s new). Versions before v4.8.1 have no entry here; see docs/plan-history.md.
 
+- **v4.68:** Anki import shows one line saying what comes along, with Change to see the options. Once installed, the app can open Anki files offline after it has been online once. Add exam date on Today is one button, and searching by tag on Decks now counts matching cards.
 - **v4.67:** Searching on the Decks screen now finds cards too, and deleting a deck offers to save a copy first. On a computer: buttons line up in two sizes, Start sits at the right of the top card, and switches are on the left. The card filter’s flag option is now called Flagged, and your own model now needs stronger proof before it takes over.
 - **v4.66:** Search in Help, and a Paste Claude’s answer button in Import. Undo for deletes in the hard-cards coach, and tidier end screens. Shorter lines on Today, Stats and decks.
 - **v4.65:** Undo after deleting cards, a deck or an import. Settings, Add a card and Practice test are shorter: extra options sit under More. A + button on phones to add cards, bigger tap areas, and less text on screen.

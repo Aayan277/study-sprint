@@ -257,7 +257,7 @@ const SCENES = [
   { n: 'focus-decks', run: async p => { await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await focusRing(p, '.decks .deck-open, .decks .deck-go', 'a Decks row'); } },
   { n: 'focus-exam', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.exam-row'); await focusRing(p, '.exams a, .exams button', 'an exam row'); } },
   { n: 'done', data: 'done', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.th-done'); } },
-  { n: 'today-sheet', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('[data-addexam]'); await p.click('[data-addexam]'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
+  { n: 'today-sheet', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#addExamBtn'); await p.click('#addExamBtn'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
   { n: 'options', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#optBtn'); await p.click('#optBtn'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
   { n: 'streak', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#streakBtn'); await p.click('#streakBtn'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
   { n: 'review-front', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#flash'); await p.waitForTimeout(250); }, after: p => p.goto(URL + '#/today') },

@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, accentTitle } from './themes.js';
 import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
-import { initInstall } from './install.js';
+import { initInstall, isInstalled } from './install.js';
 import { initPanelResize } from './panel-resize.js';
 import { takeDraft } from './import-draft.js';
 import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty } from './ui.js';
@@ -25,7 +25,7 @@ import { initUpdates, showUpdateRequired } from './update.js';
 import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
 // Shown in Settings → About, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.67';
+const APP_VERSION = '4.68';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
@@ -366,6 +366,19 @@ function tidyMediaWhenIdle() {
   else setTimeout(run, 3000);
 }
 
+// Installed app, online, idle: save the Anki reader libraries once so Anki files open offline later (js/anki-read.js).
+function saveAnkiLibrariesWhenIdle() {
+  const run = () => {
+    // The same cheap test as shouldSaveAnkiLibraries (anki-read.js), done here first so a device that fails it never loads that file.
+    if (!(isInstalled() && navigator.onLine && navigator.serviceWorker?.controller && !navigator.connection?.saveData)) return;
+    import('./anki-read.js').then(m => {
+      return m.saveAnkiLibraries();
+    }).catch(() => {});
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 15000 });
+  else setTimeout(run, 5000);
+}
+
 // The server can name the oldest version allowed to sync (js/app-config.js). Asked once, after the first screen, only when signed in (a device that
 // never syncs has nothing to protect and sends nothing). Any problem with the question means "no minimum".
 async function checkMinClient() {
@@ -438,6 +451,7 @@ async function start() {
   initBadge();          // the due count on the app icon, when the person turned it on (badge.js)
   if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
   tidyMediaWhenIdle();
+  saveAnkiLibrariesWhenIdle();
   checkMinClient().catch(err => console.error(err));
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.
   if (!resetShown) { const kept = keptResetLink(); if (kept) showResetLink(kept); }

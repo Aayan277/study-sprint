@@ -8,6 +8,11 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.68', items: [
+    'Anki import shows one line saying what comes along, with Change to see the options.',
+    'Once installed, the app can open Anki files offline after it has been online once.',
+    'Add exam date on Today is one button, and searching by tag on Decks now counts matching cards.',
+  ] },
   { version: '4.67', items: [
     'Searching on the Decks screen now finds cards too, and deleting a deck offers to save a copy first.',
     'On a computer: buttons line up in two sizes, Start sits at the right of the top card, and switches are on the left.',
