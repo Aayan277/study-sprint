@@ -8,7 +8,7 @@ per-card differences); every answer is drawn from that true recall, so the app's
 real life. Results are paired by seed, so version A and B see the same students.
 
 Used for v3.1 (exam final pass: `report-v3.1.md`, which caught that 95%/5 days lost 1–2 points; 99%/3 days passed)
-and v3.5 (Play speed calibration and multiple-choice cap: see PLAN.md "Algorithm follow-ups").
+and v3.5 (Play speed calibration and multiple-choice cap: see docs/plan-history.md "Algorithm follow-ups").
 
 ## Setup (once, outside git)
 

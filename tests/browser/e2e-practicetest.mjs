@@ -263,7 +263,8 @@ ok((await state()).i === 0 && !(await state()).done, 'the "no test in progress" 
 // ---------- forced colors (high contrast) ----------
 await answerNow('right'); await next(); await page.click('#tFlag');
 await page.emulateMedia({ forcedColors: 'active' });
-const w = sel => page.evaluate(sel => { const c = getComputedStyle(document.querySelector(sel)); return { b: c.borderTopWidth, o: c.outlineWidth }; }, sel);
+// An outline only shows when its style isn't 'none'; newer Chromium reports outline-width even then, so count it as 0px.
+const w = sel => page.evaluate(sel => { const c = getComputedStyle(document.querySelector(sel)); return { b: c.borderTopWidth, o: c.outlineStyle === 'none' ? '0px' : c.outlineWidth }; }, sel);
 await page.click('.t-grid [data-q="0"]');
 const on = await w('.t-opt:has(input:checked)'), off = await w('.t-opt:not(:has(input:checked))');
 ok(on.b !== off.b || on.o !== off.o, 'forced colors: a checked option differs from the others (border ' + on.b + ' vs ' + off.b + ')');

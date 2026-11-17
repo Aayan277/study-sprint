@@ -435,7 +435,7 @@ The issue is called **Study Sprint: storage is almost full** and has the label `
 it is updated each day, not repeated. It shows a small table: what is used, its limit, how full it is.
 
 - **Pictures and sounds near the limit, or data near the limit:** a few people are using most of the shared space. Pick one:
-  1. **Give each person less.** Lower the default limits (step 2c has the one-line change for the per-person defaults; backlog item 20 in `PLAN.md`
+  1. **Give each person less.** Lower the default limits (step 2c has the one-line change for the per-person defaults; backlog item 20 in `docs/backlog.md`
      explains the sums), and give people you know more with the `quotas` table. To see who uses the most, run
      `supabase/owner.sql` (step 9, "Who uses how much").
   2. **Move to the Pro plan** (backlog item 7). Then raise the two fuses by editing the two rows in **Table Editor → global_limits** (step 2c).
