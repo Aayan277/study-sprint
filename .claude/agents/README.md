@@ -1,12 +1,14 @@
 # Agents
 
-Helper agents Claude Code can hand work to in this project (in the cloud or on a computer).
-Ask for one by name, e.g. "use the Accessibility Auditor to check the Review screen".
+Four helper agents, each with a "This project" section holding Study Sprint's rules (sw.js hash, no helper text, mobile-first, both styles, test commands, safety).
 
-From [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents) (MIT licence, see
-LICENSE-agency-agents), picked for a web app like this one:
+| Agent | Model | Used for |
+|---|---|---|
+| Code Reviewer | Opus | Review before every merge |
+| Accessibility Auditor | Opus | WCAG 2.2 AA checks in both styles, phone and computer |
+| Minimal Change Engineer | Sonnet | Writing the code for a planned work package |
+| Test Automation Engineer | Sonnet | Writing and fixing unit and browser tests |
 
-- Testing: Accessibility Auditor, Evidence Collector, Reality Checker, Test Automation Engineer, Performance Benchmarker
-- Building: Frontend Developer, Code Reviewer, Minimal Change Engineer, Codebase Onboarding Engineer, Technical Writer
-- Design: UI Designer, UX Architect, UX Researcher, Whimsy Injector
-- Security: AI-Generated Code Auditor (checks things like the Supabase sync rules)
+Planning uses the built-in Plan agent on Opus.
+
+Adapted from [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents) (MIT licence, see LICENSE-agency-agents). The other twelve imported agents were removed in November 2026 because they were generic (React, editor plugins, playful copy) and didn't know this project's rules.
