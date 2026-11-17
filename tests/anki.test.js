@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ankiMath, htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote, ioLabels, soundNames, soundReport } from '../js/anki.js';
+import { ankiMath, htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote, ioLabels, soundNames, soundReport, optionsSummary } from '../js/anki.js';
 import { splitMath } from '../js/math.js';
 import { isAnswerLog, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
 
@@ -660,3 +660,21 @@ import { typedOrds } from '../js/anki.js';
     assert.equal(reverseModel({ name: 'R', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}'), tmpl(1, '{{Back}}{{Type:Front}}')] }), false, 'an unknown tag is a field name, so card 2 shows the Front');
   });
 }
+
+test('optionsSummary: the line above the Anki import switches', () => {
+  assert.equal(optionsSummary({ pictures: true, sounds: true, history: true }), 'Keeps pictures, sounds and review history');
+  assert.equal(optionsSummary({ pictures: true, sounds: false, history: true }), 'Keeps pictures and review history · Leaves out sounds');
+  assert.equal(optionsSummary({ pictures: true, sounds: true, history: true, fields: true, reverse: true, subdecks: true }),
+    'Keeps pictures, sounds, review history, other fields, reverse cards and subdecks');
+  assert.equal(optionsSummary({ history: true }), 'Keeps review history');
+  assert.equal(optionsSummary({ pictures: true, history: false }), 'Keeps pictures · Leaves out review history');
+  // a re-import
+  assert.equal(optionsSummary({ pictures: true, update: { on: true, safe: 3, old: 4 } }), 'Keeps pictures · Updates 3 cards you already have');
+  assert.equal(optionsSummary({ update: { on: true, safe: 1, old: 1 } }), 'Updates 1 card you already have');
+  assert.equal(optionsSummary({ history: true, update: { on: false, safe: 3, old: 3 } }), 'Keeps review history · Adds 3 cards you already have again');
+  // nothing applicable
+  assert.equal(optionsSummary({}), '');
+  assert.equal(optionsSummary(), '');
+  assert.equal(optionsSummary({ pictures: false, update: null }), 'Leaves out pictures');
+  assert.equal(optionsSummary({ sounds: undefined, history: undefined, update: null }), '');
+});
