@@ -253,7 +253,7 @@ export async function renderToday(el) {
     // A course with no cards at all is not "done": it says so and offers Add cards (instead of a green tick).
     const inside = subtreeIds(data.decks, deck.id);
     const empty = !c.total && ![...data.deckOf.values()].some(id => inside.has(id));
-    if (empty) return `<a class="tdeck fr-emptydeck" href="#/import/${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="${esc(deck.name)}: no cards yet">
+    if (empty) return `<a class="tdeck fr-emptydeck" href="#/import/${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="${esc(deck.name)}: no cards yet. Add cards">
       <span class="td-main">
         ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
         <span class="td-name">${esc(deck.name)}</span>

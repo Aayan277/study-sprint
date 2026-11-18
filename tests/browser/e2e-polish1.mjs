@@ -95,14 +95,16 @@ await d.goto('http://localhost:8123/#/decks'); await d.waitForSelector('.deck');
 const edges = {};
 for (const [n, h, s] of [['today', '#/today', '.tdeck'], ['decks', '#/decks', '.deck'], ['stats', '#/stats', '.card'], ['play', '#/play', '#startBtn'], ['settings', '#/settings', '#skins'], ['browse', '#/browse', '.crow-btn']]) {
   await go(d, h, s);
-  edges[n] = await d.evaluate(() => { const v = document.querySelector('main > .view'), r = v.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(v.querySelector('h1').getBoundingClientRect().left)]; });
+  edges[n] = await d.evaluate(() => { const v = document.querySelector('main > .view'), r = v.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(v.querySelector('h1').getBoundingClientRect().left), Math.round(Math.max(...[...v.querySelectorAll(':scope > :not(.screen-head):not(.back)')].map(e => e.getBoundingClientRect().width)))]; });
 }
 // (UI audit M9, intended change: the wide screens share one left edge and 1120px; the narrow columns (Play, Settings, Browse) are centred in the same space)
 const wide = ['today', 'decks', 'stats'].map(n => edges[n]);
 ok(wide.every(e => e[0] === edges.today[0] && e[1] === 1040 && e[2] === edges.today[0]), 'Today, Decks and Stats share one left edge and are 1040px wide (--page-w): ' + JSON.stringify(wide));
 const mainBox = await d.evaluate(() => { const m = document.querySelector('main').getBoundingClientRect(); return [Math.round(m.left), Math.round(m.right)]; });
 // (round 4, intended change: the narrow columns start at the same left edge as Today and Decks instead of floating in the middle)
-ok(['play', 'settings', 'browse'].every(n => Math.abs(edges[n][0] - edges.today[0]) <= 2 && edges[n][1] <= 1040), 'Play, Settings and Browse are narrow columns on the same left edge as Today: ' + JSON.stringify(['play', 'settings', 'browse'].map(n => edges[n])));
+ok(['play', 'settings', 'browse'].every(n => Math.abs(edges[n][0] - edges.today[0]) <= 2), 'Play, Settings and Browse start on the same left edge as Today: ' + JSON.stringify(['play', 'settings', 'browse'].map(n => edges[n])));
+ok(['play', 'settings'].every(n => edges[n][3] <= 760.5), 'Play and Settings content is at most 760px wide: ' + JSON.stringify(['play', 'settings'].map(n => edges[n][3])));
+ok(edges.browse[1] <= 1040, 'Browse is at most the page width (--page-w): ' + edges.browse[1]);
 await go(d, '#/play', '#startBtn');
 ok(await d.$eval('#startBtn', e => e.getBoundingClientRect().width <= 760), 'Play keeps a 760px reading column inside it');
 await go(d, '#/today', '.today-hero');

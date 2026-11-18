@@ -210,7 +210,6 @@
   :root[data-ui="clinical"] .side-exam{background:none;box-shadow:none;color:var(--exam);font-weight:550;padding:0 2px}
   :root[data-ui="clinical"] .side-exam.soon{background:none;box-shadow:none;color:var(--again)}
   :root[data-ui="clinical"] .side-dot{box-shadow:none}
-  :root[data-ui="clinical"] .side-streak.kept .ring-in .ico{filter:none}
   @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .side-streak:hover,:root[data-ui="clinical"] .side-sync:hover,:root[data-ui="clinical"] .side-set:hover,:root[data-ui="clinical"] .side-help:hover,:root[data-ui="clinical"] .side-ib:hover{background:var(--side-on)}}
   :root[data-ui="clinical"] .today-hero{padding:var(--s-6) var(--s-8)}
   :root[data-ui="clinical"] .th-big{font-size:2rem}
@@ -325,7 +324,6 @@
    4. v4.9 additions (all variants)
    ====================================================================== */
 /* "All done for today": no repeated headline, no "0 due · 0 new"; the ring turns a quiet green; extra study is secondary */
-:root[data-ui="clinical"] .today-hero:has(.th-done) .th-sub,
 :root[data-ui="clinical"] .th-done > b{display:none}
 :root[data-ui="clinical"] .today-hero:has(.th-done) .ring-fg{stroke:var(--good)}
 :root[data-ui="clinical"] .ring-check{color:var(--good);width:26px;height:26px}
@@ -353,7 +351,6 @@
 :root[data-ui="clinical"][data-ui="clinical"] .today-hero{padding:var(--s-4);border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line)}
 :root[data-ui="clinical"][data-ui="clinical"] .th-main{gap:var(--s-4)}
 :root[data-ui="clinical"][data-ui="clinical"] .th-big{font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
-:root[data-ui="clinical"][data-ui="clinical"] .th-sub{font-size:var(--fs-sm)}
 /* streak: one quiet line under a hairline instead of a three-line block */
 :root[data-ui="clinical"][data-ui="clinical"] .today-hero .streak{margin:var(--s-4) 0 var(--s-4);padding:var(--s-3) 0 0;border-top:1px solid var(--line);font-size:var(--fs-sm);gap:4px 8px;width:100%}
 :root[data-ui="clinical"][data-ui="clinical"] .today-hero .streak b{font-size:var(--fs-sm)}
@@ -421,11 +418,6 @@
   :root[data-ui="clinical"][data-ui="clinical"] .today-hero .streak{grid-column:1 / -1;grid-row:2;margin:var(--s-5) 0 0}
   :root[data-ui="clinical"][data-ui="clinical"] .today-hero .btn.big,
   :root[data-ui="clinical"][data-ui="clinical"] .today-hero .th-done{grid-column:2;grid-row:1;align-self:center}
-  :root[data-ui="clinical"][data-ui="clinical"] .tdecks{grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
-  :root[data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck{box-shadow:inset 0 1px 0 var(--line)}
-  :root[data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck:nth-child(-n+2){box-shadow:none}
-  :root[data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck:nth-child(even){box-shadow:inset 1px 0 0 var(--line),inset 0 1px 0 var(--line)}
-  :root[data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck:nth-child(2){box-shadow:inset 1px 0 0 var(--line)}
   :root[data-ui="clinical"][data-ui="clinical"] .exams{grid-template-columns:repeat(2,minmax(0,1fr))}
   :root[data-ui="clinical"][data-ui="clinical"] .exams .exam-row + .exam-row{box-shadow:inset 1px 0 0 var(--line)}
   :root[data-ui="clinical"][data-ui="clinical"] main[data-route="review"] .rv-face{padding:var(--s-8) var(--s-10)}
@@ -492,8 +484,7 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-new .ico{display:none}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-badge{background:none!important;box-shadow:none!important;color:var(--text-2)!important;font-weight:500;padding:0;min-width:0}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-dot{border-radius:1px;box-shadow:none}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-streak > .ring,
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-snow{display:none}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-streak > .ring{display:none}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-sync i{border-radius:1px}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-new{padding-left:10px!important}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-new .side-name::before{content:"+ "}
@@ -514,7 +505,7 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .switch{border-radius:4px}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .switch::after{border-radius:2px}
 /* no icons inside text buttons (Start, Options); icon-only buttons keep theirs */
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.today-hero .btn.big,#optBtn,#resumeBtn) .ico{display:none}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.today-hero .btn.big,#resumeBtn) .ico{display:none}
 /* phones: the freeze note gets its own line rather than wrapping after a stray "·" */
 @media (max-width:1023px){
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak .frz-pill{flex-basis:100%}
@@ -631,7 +622,6 @@
 :root[data-ui="clinical"] :is(.lp-rates .r1,.lp-rates .r2,.lp-rates .r3,.lp-rates .r4){box-shadow:0 0 0 1px var(--line-strong)}
 :root[data-ui="clinical"] .lp-points .ico{border-radius:var(--r-sm);background:var(--surface-2);box-shadow:none;color:var(--text-2)}
 :root[data-ui="clinical"] .fr-tag{border-radius:var(--r-xs);background:var(--surface-2);box-shadow:none;color:var(--text-2)}
-:root[data-ui="clinical"] .fr-add{border-radius:var(--r-sm)}
 :root[data-ui="clinical"] .inst-icon{box-shadow:0 0 0 1px var(--line-strong);border-radius:var(--r-md)}
 :root[data-ui="clinical"] .lp-ph-prog i{box-shadow:none}
 @media (min-width:1024px){
@@ -705,7 +695,7 @@
 
   /* --- page widths, centred --- */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{margin-inline:auto}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"]   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"]   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"]   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="play"],[data-route="import"]) > .view > :not(.screen-head):not(.back){max-width:760px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="play"],[data-route="import"]) > .view > :not(.screen-head):not(.back){max-width:760px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="review"] > .view{max-width:780px}
   /* first run: its own wide two-part page, centred like Original */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] body.welcome main > .view{max-width:1160px}
@@ -926,7 +916,6 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .add-cards-btn .ico{color:var(--text-2)}
 
 /* Today draft: icon-only Options shows its icon, compact hero row on a computer, plain empty-deck row */
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] #optBtn .ico{display:inline-block}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak{width:auto}
 @media (min-width:1024px){
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-4) var(--s-5)}

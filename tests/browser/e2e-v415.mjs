@@ -145,8 +145,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   p = await open(1440, 900, { at: WED, hash: '#/today' });
   await seed(p, { studied: [4, 5, 6] });
   await p.reload(); await p.waitForSelector('.today-hero');
-  const gap = await p.locator('.today-hero .streak').count() ? await norm(p, '.streak') : '0 day streak (hidden)';
-  ok(!/^3\s*day streak/.test(gap), 'after days away the streak is not bridged by the days nobody opened the app: ' + gap);
+  ok(await p.locator('.today-hero .streak').count() === 0, 'after days away the streak is not bridged by the days nobody opened the app (no streak line)');
   ok((await p.evaluate(async () => Object.keys((await (await import('./js/db.js')).getSettings()).idleDays || {}).sort().join())) === '2026-10-14', 'only today was noted');
   await p.context().close();
 }

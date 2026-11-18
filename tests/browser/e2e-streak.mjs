@@ -244,11 +244,9 @@ const g = await open(375, 740, { touch: true, at: new Date(2026, 9, 16, 12) }); 
 await g.goto(URL + '#/today'); await g.waitForSelector('.today-hero');
 await seed(g, [2, 4, 7]);                                                           // Wed 14, Mon 12 and Fri 9; Thu 15 and Tue 13 missed
 await g.reload(); await g.waitForSelector('.today-hero');
-const second = await g.locator('.today-hero .streak').count() ? await norm(g, '.streak') : '0 day streak (hidden)';
 // v4.2.1 (owner decision): the week's freeze stays on the EARLIEST missed day (Tue 13), so the newer miss (Thu 15) ends
 // the streak at once. Before, the freeze moved to Thu and the streak was 1 ("Freeze used yesterday").
-ok(/^0\s*day streak/.test(second) && !second.includes('Study today') && !second.includes('Freeze used') && !second.includes('freeze ready'),
-  'a second miss in the same week ends the streak, the freeze stays on the first miss: ' + second);
+ok(await g.locator('.today-hero .streak').count() === 0, 'a second miss in the same week ends the streak (no streak line), the freeze stays on the first miss');
 
 // ============================ backup and sync keep the days off ============================
 const h = await open(375, 740, { touch: true });

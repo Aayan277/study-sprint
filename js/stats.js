@@ -163,7 +163,7 @@ function calendarHTML(cal, now) {
       <div class="mhead"><h2 id="calTitle">Study calendar</h2>
         <span class="cal-sum"><span class="muted small">${plural(cal.daysStudied, 'day')} in the past year · best streak ${plural(cal.longest, 'day')}</span>
           <button type="button" class="btn ghost small cal-pickbtn" id="calPickBtn" aria-label="Pick a day" title="Pick a day">${icon('calendar')}</button>
-          <input type="date" id="calPick" class="cal-date sr-only" tabindex="-1" aria-hidden="true" min="${esc(shown[0] ? dayKey(shown[0].time) : '')}" max="${esc(shown.length ? dayKey(shown[shown.length - 1].time) : '')}"></span></div>
+          <input type="date" id="calPick" class="cal-date sr-only" tabindex="-1" aria-hidden="true" aria-label="Pick a day" min="${esc(shown[0] ? dayKey(shown[0].time) : '')}" max="${esc(shown.length ? dayKey(shown[shown.length - 1].time) : '')}"></span></div>
       <div class="cal" role="img" aria-label="${esc(`Studied on ${cal.daysStudied} of the last ${cal.daysShown} days, ${plural(cal.answers, 'answer')} in all. Longest streak ${plural(cal.longest, 'day')}.${cal.weeks.some(w => w.some(d => d.frozen)) ? ' Days covered by a streak freeze have a diagonal hatch.' : ''}`)}">
         <span class="cal-wd" aria-hidden="true"><b></b><b>Mon</b><b></b><b>Wed</b><b></b><b>Fri</b><b></b><b></b></span>
         <div class="cal-scroll" id="calScroll">
@@ -212,7 +212,7 @@ function wireCalendar(el) {
   });
   // The keyboard way (WCAG 2.1.1): the "Pick a day" date box shows the same line, and the square is marked and scrolled into view.
   const pick = el.querySelector('#calPick');
-  el.querySelector('#calPickBtn')?.addEventListener('click', () => { try { pick.showPicker(); } catch { pick.focus(); } });
+  el.querySelector('#calPickBtn')?.addEventListener('click', () => { try { pick.showPicker(); } catch { pick.classList.remove('sr-only'); pick.removeAttribute('aria-hidden'); pick.removeAttribute('tabindex'); pick.focus(); } });
   pick?.addEventListener('change', () => {
     const cell = [...grid.querySelectorAll('i[data-t]')].find(c => dayKey(+c.dataset.t) === pick.value);
     if (!cell) { if (pick.value) el.querySelector('#calInfo').textContent = 'No calendar square for that day.'; return; }

@@ -65,7 +65,7 @@ for (const [w, h] of [[1440, 900], [1024, 768]]) for (const mode of ['light', 'd
 {
   const { p, ctx } = await open(1440, 900, 'clinical', 'light');
   const r = await p.evaluate(() => { const hero = document.querySelector('.today-hero'), cs = getComputedStyle(hero), hb = hero.getBoundingClientRect(), b = document.getElementById('startBtn').getBoundingClientRect(); return { right: hb.right - parseFloat(cs.paddingRight) - b.right, w: b.width, top: b.top - hb.top, h: hb.height }; });
-  ok(Math.abs(r.right) <= 2 && Math.abs(r.w - 220) <= 1 && r.top < r.h / 2, `clinical 1440: Start is a 220px button at the right end of the one-row card ($${r.right.toFixed(1)}px in, ${r.w.toFixed(0)}px wide)`);
+  ok(Math.abs(r.right) <= 2 && Math.abs(r.w - 220) <= 1 && r.top < r.h / 2, `clinical 1440: Start is a 220px button at the right end of the one-row card (${r.right.toFixed(1)}px in, ${r.w.toFixed(0)}px wide)`);
   await ctx.close();
 }
 
