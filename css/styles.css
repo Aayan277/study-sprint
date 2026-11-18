@@ -3437,8 +3437,8 @@ main[data-route="decks"] .decks.compact .deck .subdecks{grid-column:1 / -1;grid-
 #optBtn{flex:none}
 .fr-emptydeck .td-go{display:none}
 @media (min-width:1024px){
-  :root:not([data-ui="clinical"]) .today-hero{width:fit-content;max-width:100%;padding:var(--s-4) var(--s-5);gap:var(--s-4) var(--s-5)}
-  :root:not([data-ui="clinical"]) .today-hero .btn.big{flex:0 0 auto;min-width:220px}
+  :root:not([data-ui="clinical"]) .today-hero{flex-wrap:nowrap;padding:var(--s-4) var(--s-5);gap:var(--s-4) var(--s-5)}
+  :root:not([data-ui="clinical"]) .today-hero .btn.big{flex:1 1 auto;min-width:220px}   /* Start fills the row, so the card spans the page like the deck list below it, with no empty gap */
   :root:not([data-ui="clinical"]) .today-hero .th-done{flex:0 1 auto}
 }
 @media (min-width:1024px) and (pointer:fine){#optBtn{width:36px;height:36px}}
