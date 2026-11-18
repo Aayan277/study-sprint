@@ -55,9 +55,9 @@ ok((await p.textContent('.exam-line')).includes('Exam in 14 days'), '#6 the exam
 await p.evaluate(async () => { const db = await import('./js/db.js'); await db.saveDeck({ id: 'empty1', name: 'Nothing here', course: '', color: '#3E63DD', parentId: '', created: Date.now() }); });
 await go('#/decks', '.deck');
 const tile = p.locator('.deck', { hasText: 'Nothing here' });
-ok(await tile.locator('a.deck-go.add[href="#/import/empty1"]').count() === 1, '#9 an empty deck offers + Add cards');
+ok(await tile.locator('a.add-cards-btn[href="#/import/empty1"]').count() === 1, '#9 an empty deck offers + Add cards');
 ok(await tile.locator('.deck-go.done').count() === 0, '#9 and shows no green tick');
-ok(await tile.locator('a.deck-go.add', { hasText: '+ Add cards' }).count() === 1, '#9 the button says + Add cards');
+ok(await tile.locator('a.add-cards-btn', { hasText: 'Add cards' }).count() === 1, '#9 the button says Add cards');
 
 // ---- #10 long parent name at 1440 ----
 const long = 'Supercalifragilisticexpialidocious'.repeat(3) + 'Parent';

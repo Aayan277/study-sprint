@@ -1,7 +1,7 @@
 // The Decks tab: list of decks, one deck's cards, and the create / edit / delete sheet.
 
 import * as db from './db.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold, showFieldError, clearFieldError, undoOpts } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, foldOpen, saveFold, showFieldError, clearFieldError, undoOpts } from './ui.js';
 import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
@@ -137,20 +137,20 @@ export async function renderLibrary(el) {
           <span class="deck-counts">
             ${stats.total ? `<span><b>${stats.total.toLocaleString('en')}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
             <span class="due${c.due ? "" : " zero"}"><b>${c.due.toLocaleString('en')}</b> due</span>
-            <span><b>${c.fresh.toLocaleString('en')}</b> new</span>` : '<span>No cards yet</span>'}
+            <span><b>${c.fresh.toLocaleString('en')}</b> new</span>
+            <span><b>${Math.round(learned * 100)}%</b> mastered</span>` : '<span>No cards yet</span>'}
             ${view.hits?.get(deck.id) ? `<span class="hit"><b>${view.hits.get(deck.id).toLocaleString('en')}</b> matching</span>` : ''}
           </span>
         </button>
-        ${stats.total ? `<span class="deck-ring" role="img" aria-label="${Math.round(learned * 100)}% learned">${ring(learned, 44, 4, `<span class="mono">${Math.round(learned * 100)}<small>%</small></span>`)}</span>` : ''}
-        <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
         <div class="deck-act">
-          ${!stats.total ? `<a class="${compact ? 'deck-go add' : 'btn ghost small'}" href="#/import/${esc(deck.id)}">+ Add cards</a>`
+          ${!stats.total ? `<a class="add-cards-btn" href="#/import/${esc(deck.id)}">${icon('plus')} Add cards</a>`
           : compact
             ? (go ? `<button class="deck-go${first ? ' lead' : ''}" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}" title="Study ${plural(go, 'card')}">${icon('play')}</button>`
                   : `<span class="deck-go done" role="img" aria-label="Done for today" title="Done for today">${icon('check')}</span>`)
             : (go ? `<button class="btn primary small" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}">${icon('play')} Study ${go}</button>`
                   : `<span class="deck-done">${icon('check')} Done for today</span>`)}
         </div>
+        <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
         ${compact ? compactSubdecks(item, q) : subdeckBox(list, item, !fold.has(deck.id), today, cnt)}
       </article>`;
   };

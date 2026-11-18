@@ -136,7 +136,7 @@ const go1 = await box(p, '.deck-go'); ok(go1.w === 44 && go1.h === 44, 'the play
 ok((await p.getAttribute('[data-study="econ"]', 'aria-label')) === 'Study Microeconomics: 6 cards', 'with an accessible name: ' + await p.getAttribute('[data-study="econ"]', 'aria-label'));
 ok(await p.$eval('.deck:has([data-study="zed"]) .deck-go', e => !!e), 'a deck with cards to study has a play button');
 // Round 2 A6: a deck with no cards at all is not "done": it offers + Add cards (the check is for decks that are caught up; see e2e-counts.mjs)
-ok(await p.locator('.deck:has-text("Chemistry") a.deck-go.add[href="#/import/chem"]').count() === 1 && await p.$('.deck-go.done') === null, 'an empty deck shows + Add cards instead of a check');
+ok(await p.locator('.deck:has-text("Chemistry") a.add-cards-btn[href="#/import/chem"]').count() === 1 && await p.$('.deck-go.done') === null, 'an empty deck shows + Add cards instead of a check');
 await p.click('[data-study="econ"]'); await p.waitForSelector('#flash');
 ok(await p.evaluate(() => location.hash) === '#/review/econ', 'the play button starts the deck');
 await p.click('#endBtn'); await p.waitForSelector('.finish-next');
@@ -331,9 +331,11 @@ await p.reload(); await p.waitForSelector('#deckGrid .deck');
 // ---------- B4 on a computer: tiles keep their own height ----------
 const tiles = () => p.$$eval('#deckGrid > .deck', d => d.map(x => { const r = x.getBoundingClientRect(); return { y: Math.round(r.y), h: Math.round(r.height) }; }));
 let t = await tiles(); const row1 = t.filter(x => x.y === t[0].y);
-ok(row1.length >= 3, 'three tiles in a row at 1440: ' + row1.length);
+ok(row1.length === 1, 'one deck per row at 1440 (full-width rows): ' + row1.length);
 const rowMates = await p.evaluate(() => { const ds = [...document.querySelectorAll('#deckGrid > .deck')].map(d => { const r = d.getBoundingClientRect(); return { y: Math.round(r.y), h: Math.round(r.height) }; }); const byRow = {}; for (const d of ds) (byRow[d.y] ||= []).push(d.h); return Object.values(byRow).some(hs => new Set(hs).size > 1); });
-ok(rowMates, 'in at least one row, tiles of different heights sit side by side');
+ok(!rowMates, 'no two decks sit side by side');
+ok(await p.evaluate(() => { const hs = [...document.querySelectorAll('#deckGrid > .deck:not(:has(.subdecks))')].map(d => Math.round(d.getBoundingClientRect().height)); return hs.length > 1 && new Set(hs).size === 1; }), 'rows without subdecks all have the same height: ' + await p.$$eval('#deckGrid > .deck:not(:has(.subdecks))', d => d.map(x => x.querySelector('.deck-name').textContent + ':' + Math.round(x.getBoundingClientRect().height)).join()));
+ok(await p.evaluate(() => { const xs = [...document.querySelectorAll('#deckGrid > .deck > .icon-btn')].map(b => Math.round(b.getBoundingClientRect().right)); return xs.length > 1 && new Set(xs).size === 1; }), 'the more button is at the same x on every row');
 await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('compactDecks', false); });
 await p.reload(); await p.waitForSelector('#deckGrid .deck');
 ok(await p.evaluate(() => { const byRow = {}; for (const d of document.querySelectorAll('#deckGrid > .deck')) { const r = d.getBoundingClientRect(); (byRow[Math.round(r.y)] ||= []).push(Math.round(r.height)); } return Object.values(byRow).every(hs => new Set(hs).size === 1); }), 'off: tiles in a row all stretch to the same height, as before');

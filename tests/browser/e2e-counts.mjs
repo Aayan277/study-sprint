@@ -200,14 +200,13 @@ await go(p, '#/decks', '.deck');
 await p.evaluate(async () => { const db = await import('./js/db.js'); await db.saveDeck({ id: 'E', name: 'Brand new', course: '', color: '#8E4EC6', parentId: '', created: Date.now() }); });
 await go(p, '#/decks', '.deck');
 const empty = p.locator('.deck', { hasText: 'Brand new' });
-ok(await empty.locator('a.deck-go.add').count() === 1 && await empty.locator('.deck-go.done').count() === 0 && await empty.locator('.deck-ring').count() === 0, 'an empty deck: + Add cards, no tick, no ring');
+ok(await empty.locator('a.add-cards-btn').count() === 1 && await empty.locator('.deck-go.done').count() === 0 && await empty.locator('.deck-ring').count() === 0, 'an empty deck: Add cards, no tick, no ring');
 // a deck that is caught up (cards, none due or new) gets the check
 await p.evaluate(async () => { const db = await import('./js/db.js'); const now = Date.now(); await db.addDeckWithCards({ id: 'Done1', name: 'Caught up', color: '#12A594', created: now }, [{ id: 'dn1', deckId: 'Done1', front: 'q', back: 'a', created: now }]);
   await db.putStates([{ cardId: 'dn1', due: now + 30 * 86400000, stability: 30, difficulty: 5, reps: 4, lapses: 0, state: 2, lastReview: now - 86400000, elapsedDays: 1, scheduledDays: 30, learningSteps: 0 }]); });
 await go(p, '#/decks', '.deck');
 ok(await p.locator('.deck', { hasText: 'Caught up' }).locator('.deck-go.done').count() === 1, 'a deck with cards and nothing due still gets the check');
-const ringLbl = await p.locator('.deck:has-text("Chemistry") .deck-ring').getAttribute('aria-label');
-ok(/^\d+% learned$/.test(ringLbl) && await p.locator('.deck:has-text("Chemistry") .deck-ring').getAttribute('role') === 'img', 'the ring is an image labelled "0% learned": ' + ringLbl);
+ok(await p.locator('.deck:has-text("Chemistry") .deck-ring').count() === 0 && /\d+%\s*mastered/.test(await p.locator('.deck:has-text("Chemistry") .deck-counts').innerText()), 'no ring: the mastery % is plain text in the meta line');
 await noHScroll(p, 'decks, phone');
 await p.screenshot({ path: SP + '/c-decks-375.png', fullPage: true });
 // the empty Decks screen is the shared start block
