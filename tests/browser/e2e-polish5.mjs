@@ -16,6 +16,7 @@ const seed = p => p.evaluate(async () => {
   const cards = (id, n) => Array.from({ length: n }, (_, i) => ({ id: id + i, deckId: id, front: `${id} q ${i}`, back: `${id} a ${i}`, tags: [], created: i }));
   await db.addDeckWithCards({ id: 'a', name: 'Pharmacology and Therapeutics for Clinical Practice Midterm', color: '#46A758', created: now + 1, examDate: iso(5) }, cards('a', 3));
   await db.addDeckWithCards({ id: 'b', name: 'Supercalifragilisticexpialidocious_Anatomy_Deck_Name', color: '#3E63DD', created: now + 2, examDate: iso(5) }, cards('b', 3));
+  for (let i = 0; i <= 2; i++) await db.addLog({ cardId: 'a0', timestamp: now - i * D, source: 'review', correct: true, rating: 3, ms: 3000, state: 2 }); // 3 study days: the Today streak chip and the Stats calendar only show then
 });
 
 for (const [w, h] of [[375, 812], [1440, 900]]) {
@@ -100,8 +101,7 @@ for (const [w, h] of [[375, 812], [1440, 900]]) {
     ok(g.right <= g.panelLeft, `${w}px: the toast stays left of the open side panel (${Math.round(g.right)} <= ${Math.round(g.panelLeft)})`);
   }
 
-  // Stats: the "Pick a day" button shows a focus ring (the calendar card needs 3 days with answers)
-  await p.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards'))[0]; for (let i = 1; i <= 3; i++) await db.addLog({ cardId: c.id, timestamp: Date.now() - i * 86400000, source: 'review', correct: true, rating: 3, ms: 3000, state: 2 }); });
+  // Stats: the "Pick a day" button shows a focus ring (the calendar card needs 3 days with answers, seeded above)
   await go(p, '#/stats', '#calPickBtn');
   for (let i = 0; i < 40 && await p.evaluate(() => document.activeElement?.id !== 'calPickBtn'); i++) await p.keyboard.press('Tab');
   const ring = await p.$eval('#calPickBtn', e => { const s = getComputedStyle(e); return s.outlineStyle + ' ' + s.outlineWidth + ' ' + e.matches(':focus-visible'); });

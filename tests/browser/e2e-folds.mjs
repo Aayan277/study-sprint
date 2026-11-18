@@ -67,7 +67,7 @@ for (const [w, h, name] of [[375, 812, 'phone'], [1440, 900, 'computer']]) {
   await p.goto('http://localhost:8123/#/stats'); await p.waitForSelector('.pgrid, .empty');
   await p.evaluate(async () => { const db = await import('./js/db.js'); const cs = await db.getAll('cards'); const now = Date.now();
     await db.putMany('cardStates', cs.slice(0, 4).map(c => ({ cardId: c.id, due: now, stability: 5, difficulty: 5, elapsedDays: 1, scheduledDays: 1, learningSteps: 0, reps: 3, lapses: 1, state: 2, lastReview: now - 86400000 })));
-    await db.putMany('reviewLog', cs.slice(0, 4).map((c, i) => ({ cardId: c.id, timestamp: now - i * 60000, source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2 }))); });
+    await db.putMany('reviewLog', cs.slice(0, 4).map((c, i) => ({ cardId: c.id, timestamp: now - i * 86400000, source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2 }))); });   // 4 different days: the Study calendar only shows from 3 study days
   await p.reload(); await p.waitForSelector('.chart');
   ok(!(await p.isVisible('#moreBtn')), 'computer: there is no "More stats" button');
   ok(await p.isVisible('#btnTitle') && await p.isVisible('#hours') && await p.isVisible('#difficulty') && await p.isVisible('#mTitle') && await p.isVisible('#hardTitle') && await p.isVisible('#calTitle'), 'computer: every stats section is shown');
