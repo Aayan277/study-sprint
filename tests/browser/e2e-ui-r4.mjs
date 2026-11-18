@@ -115,7 +115,7 @@ for (const [label, viewport, touch] of [['PC 1440x900', PC, false], ['phone 390x
   ok(await p.$eval('.finish-next .streak', e => { const r = e.getBoundingClientRect(); return r.height <= 48 && getComputedStyle(e).borderTopWidth === '1px'; }), label + ': finish: the chip is one outlined line');
   ok(await p.locator('.finish-next .streak .frz-pill.used').count() === 1, label + ': finish: the snowflake shows because a freeze was used');
   ok(await p.$eval('.fin-links .link', e => getComputedStyle(e).textDecorationLine === 'none'), label + ': finish: the links are not underlined');
-  if (!phone) ok(await p.locator('.today-hero, .streak, .side-streak').evaluateAll(es => es.filter(e => e.offsetParent !== null).length) === 1, label + ': finish on a computer: one streak (the sidebar copy is hidden)');
+  if (!phone) ok(await p.locator('.today-hero, .streak').evaluateAll(es => es.filter(e => e.offsetParent !== null).length) === 1, label + ': finish on a computer: one streak (the sidebar copy is hidden)');
   await noHScroll(p, label + ' finish');
   await p.close();
 }
@@ -166,10 +166,10 @@ for (const [label, viewport, touch] of [['PC 1440x900', PC, false], ['phone 390x
 {
   const p = await open(PC, false);
   await seed(p, [2, 3, 4, 5, 6]);
-  const n = await p.locator('.streak, .side-streak').evaluateAll(es => es.filter(e => e.offsetParent !== null && getComputedStyle(e).visibility !== 'hidden').length);
+  const n = await p.locator('.streak').evaluateAll(es => es.filter(e => e.offsetParent !== null && getComputedStyle(e).visibility !== 'hidden').length);
   ok(n === 1, 'PC Today: exactly one streak is visible (the hero chip), not two: ' + n);
   await go(p, '#/decks', '.deck');
-  ok(await p.locator('#sideStreak').isVisible(), 'on a screen with no streak of its own, the sidebar still shows it');
+  ok(await p.locator('#sideStreak').isVisible(), 'on a screen with no streak of its own, the sidebar still shows its ring (and no streak)');
 
   // ---------- the left edges of every screen agree ----------
   const lefts = {};

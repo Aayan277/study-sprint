@@ -924,3 +924,14 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .decks{gap:0}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .decks.compact .deck{min-height:84px;padding:8px 6px 8px 16px}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .add-cards-btn .ico{color:var(--text-2)}
+
+/* Today draft: icon-only Options shows its icon, compact hero row on a computer, plain empty-deck row */
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] #optBtn .ico{display:inline-block}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak{width:auto}
+@media (min-width:1024px){
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-4) var(--s-5)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .th-main{flex:1 1 220px;min-width:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak{margin:0;padding:0;border:0;flex:none}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .btn.big,
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .th-done{flex:0 0 220px;width:220px;margin:0}
+}

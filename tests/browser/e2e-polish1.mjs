@@ -31,8 +31,7 @@ await p.evaluate(async () => {
 await go(p, '#/today', '.today-hero');
 ok(!/Mono/i.test(await css(p, '#startBtn', 'fontFamily')), 'Start is in the app font, not Geist Mono: ' + await css(p, '#startBtn', 'fontFamily'));
 ok(await css(p, '#startBtn', 'marginTop') === '0px', 'Start has no stray top margin');
-ok(!/Mono/i.test(await css(p, '.th-sub', 'fontFamily')), 'the "due · new" line is not mono');
-ok(!/Mono/i.test(await css(p, '.th-sub b', 'fontFamily')), 'its numbers share the text font');
+ok(await p.$('.th-sub') === null && await p.$('.today-hero > .th-main [data-count=due]') !== null, 'the hero has no visible "due · new" line (the counts stay for screen readers)');
 ok(await p.$eval('.exam-row .on-track, .exam-row .exam-new', e => !!e), 'exam rows have their plan line');
 const bars = await p.evaluate(() => { const bg = c => getComputedStyle(document.querySelector(c)).backgroundColor; return [bg('.tabs'), bg('.top')]; });
 const alpha = c => +(c.match(/[\d.]+/g)[3] ?? 1);
@@ -108,7 +107,7 @@ await go(d, '#/play', '#startBtn');
 ok(await d.$eval('#startBtn', e => e.getBoundingClientRect().width <= 760), 'Play keeps a 760px reading column inside it');
 await go(d, '#/today', '.today-hero');
 ok(await css(d, '.th-big', 'fontSize') === '36px', "Today's hero heading is larger on desktop");
-ok(await d.$eval('.today-hero .ring', e => e.getBoundingClientRect().width) > 100, "Today's ring is larger on desktop");
+ok(await d.$eval('.today-hero .ring', e => e.getBoundingClientRect().width) <= 84, "Today's ring is a small detail on desktop (the Start button is the hero)");
 await d.evaluate(() => { document.documentElement.setAttribute('data-theme', 'dark'); });
 const hasHScroll = await d.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 ok(!hasHScroll, 'no sideways scroll on desktop Today');

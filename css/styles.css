@@ -3425,3 +3425,21 @@ main[data-route="decks"] .decks.compact .deck .subdecks{grid-column:1 / -1;grid-
   :root:not([data-ui="clinical"]) body:not(.focus) main[data-route="review"] > .view{margin-left:max(0px,calc((100% - var(--page-w)) / 2));margin-right:auto}
   .tdecks{grid-template-columns:minmax(0,1fr);gap:var(--s-2)}
 }
+
+/* Today draft: compact hero (small ring, streak, big Start), icon-only Options, plain empty-deck row */
+:root:not([data-ui="clinical"]) .today-hero{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-3) var(--s-4);padding:var(--s-4)}
+:root:not([data-ui="clinical"]) .today-hero .th-main{flex:0 0 auto}
+:root:not([data-ui="clinical"]) .today-hero .ring{width:72px!important;height:72px!important}
+:root:not([data-ui="clinical"]) .today-hero .th-main .ring-in b{font-size:1.375rem}
+:root:not([data-ui="clinical"]) .today-hero .streak-btn{margin:0;min-width:0;width:auto;flex:0 1 auto}
+:root:not([data-ui="clinical"]) .today-hero .btn.big{flex:1 1 100%;width:auto}
+:root:not([data-ui="clinical"]) .today-hero .th-done{flex:1 1 240px;min-width:0}
+#optBtn{flex:none}
+.fr-emptydeck .td-go{display:none}
+@media (min-width:1024px){
+  :root:not([data-ui="clinical"]) .today-hero{width:fit-content;max-width:100%;padding:var(--s-4) var(--s-5);gap:var(--s-4) var(--s-5)}
+  :root:not([data-ui="clinical"]) .today-hero .btn.big{flex:0 0 auto;min-width:220px}
+  :root:not([data-ui="clinical"]) .today-hero .th-done{flex:0 1 auto}
+}
+@media (min-width:1024px) and (pointer:fine){#optBtn{width:36px;height:36px}}
+:root:not([data-ui="clinical"]) body:has(.today-hero) .side-streak,:root[data-ui="clinical"] body:has(.today-hero) .side-streak{display:none}   /* the hero already shows the ring */

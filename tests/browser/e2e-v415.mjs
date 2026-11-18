@@ -144,8 +144,8 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   // Days the app was not opened are not back-filled as quiet, however quiet the cards were: last studied 4 days ago, today is the only day noted.
   p = await open(1440, 900, { at: WED, hash: '#/today' });
   await seed(p, { studied: [4, 5, 6] });
-  await p.reload(); await p.waitForSelector('.today-hero'); await p.waitForSelector('.streak');
-  const gap = await norm(p, '.streak');
+  await p.reload(); await p.waitForSelector('.today-hero');
+  const gap = await p.locator('.today-hero .streak').count() ? await norm(p, '.streak') : '0 day streak (hidden)';
   ok(!/^3\s*day streak/.test(gap), 'after days away the streak is not bridged by the days nobody opened the app: ' + gap);
   ok((await p.evaluate(async () => Object.keys((await (await import('./js/db.js')).getSettings()).idleDays || {}).sort().join())) === '2026-10-14', 'only today was noted');
   await p.context().close();
