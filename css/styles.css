@@ -2502,7 +2502,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .wd i .ico{width:11px;height:11px;stroke-width:2.4;background:var(--surface-1);border-radius:50%}
 .wd.rest i .ico{background:none;stroke-width:2.2}
 .frz-note{margin-top:var(--s-2)}
-.pgrid .frz-note .link,.frz-note .link{display:inline;padding:0;min-height:24px;font-size:inherit;color:var(--accent-text);text-decoration:none}
+.pgrid .frz-note .link,.frz-note .link{display:inline;padding:0;min-height:24px;font-size:inherit;color:var(--accent-text);text-decoration:underline;text-underline-offset:2px}
 /* the study calendar */
 .cal-grid i.frz,.cal-key i.frz{background-image:var(--hatch);box-shadow:inset 0 0 0 1px var(--easy)}
 .cal-grid i.rest,.cal-key i.rest{background-image:var(--dots);background-size:4px 4px;background-position:1px 1px}
@@ -3140,7 +3140,7 @@ main[data-route="stats"] .ed-unit .ed-body .card{padding-top:calc(var(--s-4) + 2
 .aw-plus{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text)}
 
 /* Links to Privacy, Terms and Contact in Settings → About and under the sign-up form */
-.set-row p a,#legalNote a{color:var(--accent-text);text-decoration:none}
+.set-row p a,#legalNote a{color:var(--accent-text);text-decoration:underline;text-underline-offset:2px}
 
 /* ---- Help page (#/help, js/help.js) ---- */
 a.back{text-decoration:none}
