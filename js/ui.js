@@ -460,7 +460,7 @@ export function clearFieldError(field, errEl) {
 // Any button can carry data-hint="Name" (and data-hint-key="D" for its single-key shortcut). A mouse resting on it, or the keyboard focusing it,
 // shows the name at once (the browser's own title tooltip waits a second), with the key as a small cap. The name stays in the button's aria-label.
 let hintEl = null;
-const hideHint = () => { if (hintEl) { hintEl.hidden = true; hintEl.replaceChildren(); } };      // (emptied too, so no key cap is left in the page while no tip shows)
+export const hideHint = () => { if (hintEl) { hintEl.hidden = true; hintEl.replaceChildren(); } };      // (emptied too, so no key cap is left in the page while no tip shows)
 function showHint(el) {
   const text = el.dataset.hint;
   if (!text) return;
@@ -469,11 +469,13 @@ function showHint(el) {
   hintEl.replaceChildren(text);
   if (el.dataset.hintKey) hintEl.append(Object.assign(document.createElement('kbd'), { textContent: el.dataset.hintKey }));
   hintEl.hidden = false;
+  if (!el.isConnected) { hideHint(); return; }
   const r = el.getBoundingClientRect(), w = hintEl.offsetWidth;
   hintEl.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
   hintEl.style.top = `${r.bottom + 8}px`;
 }
 export function initHints() {
+  addEventListener('hashchange', hideHint);
   const hint = e => e.target.closest?.('[data-hint]');
   document.addEventListener('pointerover', e => { if (e.pointerType === 'touch') return; const el = hint(e); if (el) showHint(el); });
   document.addEventListener('pointerout', e => { if (hint(e)) hideHint(); });

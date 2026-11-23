@@ -32,7 +32,7 @@ import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
 import { refreshBadge } from './badge.js';
-import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, openSheet, closeSheet, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
+import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, openSheet, closeSheet, hideHint, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 import { go as navGo, replace as navReplace, holdBack, releaseBack } from './nav.js';
 
@@ -287,6 +287,7 @@ function backHTML(back) {
 }
 
 function renderSession(el, enter = false) {
+  hideHint();      // (a tooltip for a button the last card drew would stay on screen)
   if (!el.isConnected) return;       // you already moved to another screen: don't draw (or hide the tab bar) there
   R.el = el;
   if (!R.current) return finish(el);
@@ -629,7 +630,7 @@ function revealStep(el, all = false) {
 }
 
 // ---------- scratchpad (B4) ----------
-// A scribble icon (not a pencil: that would look like Edit) in the top bar (or D) draws over the card with a pen, finger or mouse (scratchpad.js). On or off is remembered
+// A pencil icon (it is a drawing tool here, and the card menu's own Edit has a word beside it) in the top bar (or D) draws over the card with a pen, finger or mouse (scratchpad.js). On or off is remembered
 // on this device. The drawing is never saved: a new card starts clean, a flip keeps it, leaving Review throws it away.
 const SCRATCH_KEY = 'study-sprint-scratch';
 const PEN_ICON = icon('edit');
