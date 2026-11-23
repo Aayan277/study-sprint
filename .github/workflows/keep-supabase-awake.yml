@@ -5,9 +5,9 @@
 # keep-workflows-enabled.yml switches this one back on before that happens (docs/sync-setup.md, "Keep the scheduled jobs
 # switched on"); if it ever is off, the Actions tab shows an "Enable workflow" button.
 #
-# Needs two repository secrets (Settings → Secrets and variables → Actions → New repository secret):
-#   SUPABASE_URL       the Project URL, e.g. https://abcdefgh.supabase.co
-#   SUPABASE_ANON_KEY  the anon / publishable key (the same public key that is in js/sync-config.js)
+# Needs no setup: it reads the project address and the public key from js/sync-config.js.
+# Optional: repository secrets SUPABASE_URL and SUPABASE_ANON_KEY (Settings → Secrets and variables → Actions)
+# override what is in that file. Only needed if you point the job at a different project.
 name: Keep Supabase awake
 
 on:
@@ -22,15 +22,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read            # to read js/sync-config.js
       issues: write             # only to report a failure (last step)
     steps:
+      - name: Get the public settings file
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: js/sync-config.js
+          sparse-checkout-cone-mode: false
+
       - name: Ask the database one cheap question
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          # Use the secrets if set; otherwise read the two public values from js/sync-config.js.
+          if [ -z "$SUPABASE_URL" ]; then
+            SUPABASE_URL=$(sed -n "s/^export const SUPABASE_URL = '\([^']*\)'.*/\1/p" js/sync-config.js)
+          fi
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            SUPABASE_ANON_KEY=$(sed -n "s/^export const SUPABASE_KEY = '\([^']*\)'.*/\1/p" js/sync-config.js)
+          fi
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "::error::Add the repository secrets SUPABASE_URL and SUPABASE_ANON_KEY (docs/sync-setup.md)."
+            echo "::error::Could not find SUPABASE_URL and SUPABASE_KEY in js/sync-config.js or in the repository secrets (docs/sync-setup.md, step 8)."
             exit 1
           fi
           # Without a signed-in user the table's privacy rules return an empty list ([]): that is the right answer.

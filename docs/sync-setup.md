@@ -304,12 +304,16 @@ Both are meant to be public: the table rules from step 2 are what protect your d
 
 Free Supabase projects **pause after about 7 days with no use**. Daily use prevents that, but a summer break
 won't. The app includes a GitHub job (`.github/workflows/keep-supabase-awake.yml`) that asks the database a
-tiny question every day. It needs your two values from step 7 as *secrets* in the GitHub repository:
+tiny question every day. It reads the two public values from step 7 out of `js/sync-config.js` by itself, so
+**no secrets are needed**.
 
-1. Open the repository on github.com. Click **Settings → Secrets and variables → Actions**.
-2. Click **New repository secret**. **Name:** `SUPABASE_URL`, **Secret:** the Project URL. Click **Add secret**.
-3. Click **New repository secret** again. **Name:** `SUPABASE_ANON_KEY`, **Secret:** the anon / publishable key. Click **Add secret**.
-4. Open the **Actions** tab, click **Keep Supabase awake** in the left list, click **Run workflow → Run workflow**,
+*Optional:* to make the job use a different project than the one in `js/sync-config.js`, add two repository
+secrets (**Settings → Secrets and variables → Actions → New repository secret**): `SUPABASE_URL` (the Project URL)
+and `SUPABASE_ANON_KEY` (the anon / publishable key). When set, they win over the file.
+
+To check it works:
+
+1. Open the **Actions** tab, click **Keep Supabase awake** in the left list, click **Run workflow → Run workflow**,
    and after a few seconds check the run has a green tick.
 
 GitHub can switch scheduled jobs off after 60 days with no activity in the repository; step 8d is there to stop
