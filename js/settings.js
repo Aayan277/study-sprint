@@ -303,7 +303,7 @@ export async function renderSettings(el) {
     // A jump lands the heading at scroll-padding + scroll-margin, which can sit below the bar, so the line is the lower of the two
     const px = v => parseFloat(v) || 0;                       // scroll-padding can be 'auto'
     const landed = px(getComputedStyle(document.documentElement).scrollPaddingTop) + px(getComputedStyle(secs[0][0].querySelector('h2')).scrollMarginTop) + 4;
-    const line = Math.max(nav.getBoundingClientRect().bottom + 4, landed);
+    const line = getComputedStyle(nav).display === 'grid' ? landed : Math.max(nav.getBoundingClientRect().bottom + 4, landed);   // (a side list is not a bar over the page: only the landing line counts)
     const atEnd = Math.ceil(scrollY + innerHeight) >= document.documentElement.scrollHeight - 2;
     let cur = null;
     for (const [sec, a] of secs) if (sec.getBoundingClientRect().top <= line) cur = a;
