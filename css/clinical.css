@@ -346,8 +346,6 @@
 :root[data-ui="clinical"][data-ui="clinical"]{ --r-lg:10px; --r-xl:12px; }
 :root[data-ui="clinical"][data-ui="clinical"] h1{font-size:1.5rem;font-weight:650;letter-spacing:-.018em}
 :root[data-ui="clinical"][data-ui="clinical"] .eyebrow{font-size:var(--fs-xs);color:var(--text-2);font-weight:500}
-:root[data-ui="clinical"][data-ui="clinical"] .section > h2,
-:root[data-ui="clinical"][data-ui="clinical"] .sec-head h2{font-size:var(--fs-sm);font-weight:600;color:var(--text-2);letter-spacing:0}
 
 /* ---------- Today: one summary panel ---------- */
 :root[data-ui="clinical"][data-ui="clinical"] .today-hero{padding:var(--s-4);border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line)}
@@ -541,9 +539,6 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck{box-shadow:none!important;min-height:52px}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck + .tdeck{box-shadow:inset 0 1px 0 var(--line)!important}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams{box-shadow:0 0 0 1px var(--line-strong)}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .section > h2,
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sec-head h2{font-size:var(--fs-base);font-weight:650;color:var(--text)}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] :is(.section > h2,.section > .h-row > h2){font-size:1.25rem;letter-spacing:-.015em}   /* Settings: real section headings, above the 16px row titles */
 
 /* ---------- Decks: one ruled list ---------- */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .decks{gap:0;box-shadow:0 0 0 1px var(--line-strong);border-radius:var(--r-md);overflow:hidden}

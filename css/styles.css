@@ -202,7 +202,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 ::placeholder{color:var(--text-3);opacity:1}
 h1[tabindex="-1"]{outline:none}   /* focused by the app after a screen change, not by the person tabbing */
 h1{font-family:var(--f-ui);font-weight:600;font-size:var(--fs-2xl);letter-spacing:-.025em;line-height:1.1;margin:0;overflow-wrap:anywhere}
-h2,h3,.label,legend{font-size:var(--fs-sm);font-weight:600;letter-spacing:-.005em;color:var(--text);margin:0 0 var(--s-3);padding:0}
+h3,.label,legend{font-size:var(--fs-sm);font-weight:600;letter-spacing:-.005em;color:var(--text);margin:0 0 var(--s-3);padding:0}
+/* One section-heading size for every screen (19px, 600). Form labels and legends keep the small label style above. */
+h2{font-size:var(--fs-lg);font-weight:600;letter-spacing:-.02em;line-height:1.25;color:var(--text);margin:0 0 var(--s-3);padding:0}
 .eyebrow{display:block;font:500 var(--fs-2xs)/1.4 var(--f-num);letter-spacing:.06em;color:var(--accent-text);margin-bottom:var(--s-1)}
 .lede{margin:0}
 .note{margin:6px 0 0;font-size:var(--fs-sm)}
@@ -767,7 +769,7 @@ main[data-route="import"] > .view > .savebar{order:5}
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.2 6.4L21 10l-6.8 1.6L12 18l-2.2-6.4L3 10l6.8-1.6zM19 15l.9 2.6L22 18l-2.1.6L19 21l-.9-2.4L16 18l2.1-.4z'/%3E%3C/svg%3E") center/contain no-repeat;
           mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.2 6.4L21 10l-6.8 1.6L12 18l-2.2-6.4L3 10l6.8-1.6zM19 15l.9 2.6L22 18l-2.1.6L19 21l-.9-2.4L16 18l2.1-.4z'/%3E%3C/svg%3E") center/contain no-repeat}
 #clearBtn{background:transparent;border-color:transparent;color:var(--text-2)}
-#pvTitle{font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em;margin:var(--s-5) 0 2px!important}
+#pvTitle{margin:var(--s-5) 0 2px!important}
 .found{margin:0 0 12px;font-size:var(--fs-sm);color:var(--text-2)}
 .found b{color:var(--accent-text);font-weight:600}
 .found .warn{color:var(--again)}
@@ -1257,7 +1259,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .ready-ring .ring-in{flex-direction:row;align-items:baseline}
 .ready-txt{flex:1;min-width:0}
 .ready-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.ready-row h2{margin:0;font-size:var(--fs-md);font-weight:600}
+.ready-row h2{margin:0}
 .ready-line{margin:4px 0 8px;font-size:var(--fs-sm);color:var(--text-2)}
 .ready-line b{color:var(--text);font-weight:600}
 .ready-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
@@ -1275,7 +1277,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .pick-n{flex:none;font-size:var(--fs-xs);color:var(--text-2)}
 .pick-all{font-weight:600}
 .mhead{display:flex;justify-content:space-between;align-items:center;gap:var(--s-2) var(--s-3);flex-wrap:wrap;margin-bottom:var(--s-3)}
-.mhead h2{margin:0;font-size:var(--fs-base);font-weight:600;letter-spacing:-.015em}
+.mhead h2{margin:0}
 .mhead .muted.small{font:400 var(--fs-xs)/1.4 var(--f-ui)}
 .pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-2);margin-bottom:var(--s-2)}
 @media (max-width:560px){.pgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -2661,7 +2663,7 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 .set-nav a{flex:none;display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--text-2);font:500 var(--fs-sm) var(--f-ui);text-decoration:none}
 @media (max-width:359px){.set-nav{gap:6px}.set-nav a{padding:0 8px;font-size:var(--fs-xs)}}
 @media (hover:hover) and (pointer:fine){.set-nav a:hover{border-color:var(--line-strong);background:var(--surface-2);color:var(--text)}}
-main[data-route="settings"] :is(.section > h2,.section > .h-row > h2){scroll-margin-top:calc(var(--top-h,57px) + 60px);font-size:1.25rem;font-weight:650;letter-spacing:-.015em;line-height:1.25;margin-bottom:var(--s-2)}
+main[data-route="settings"] :is(.section > h2,.section > .h-row > h2){scroll-margin-top:calc(var(--top-h,57px) + 60px);margin-bottom:var(--s-2)}
 .set-sub{margin:var(--s-4) 0 var(--s-2);font-size:var(--fs-base);color:var(--text-2);font-weight:600}
 /* One row-title style (16px, 600) for every setting: plain rows, switch rows, the "Advanced" folds and the help rows. Small words in <b> inside a hint stay inline. */
 main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > span:first-child > b,.adv-row > b,.adv-row > label > b,.advanced > summary){font-size:var(--fs-md);font-weight:600;color:var(--text);letter-spacing:-.005em}
