@@ -191,7 +191,8 @@ async function route() {
   const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
   // (A running Review session counts as Today.)
-  const tab = name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name === 'help' ? 'settings' : name;
+  const onPc = matchMedia('(min-width: 1024px)').matches;      // (on a PC the Add cards button is the current item on the import screen, not Decks)
+  const tab = name === 'import' && onPc ? '' : name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name === 'help' ? 'settings' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
