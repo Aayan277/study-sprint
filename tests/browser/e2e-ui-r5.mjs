@@ -53,7 +53,8 @@ const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect();
   const hw = (await box(p, 'main[data-route="help"] > .view')).w;
   ok(hw <= 760.5 && hw > 500, '7: PC Help page is at most 760px wide (' + hw + ')');
   await go(p, '#/settings', 'main[data-route="settings"] > .view');
-  ok(Math.abs((await box(p, 'main[data-route="settings"] > .view')).w - hw) < 1, '7: Help is the same width as Settings');
+  // (UI #6: from 1280px wide Settings' view also holds its side list, so its column is what matches Help)
+  ok(Math.abs((await box(p, 'main[data-route="settings"] > .view > .section')).w - hw) < 1, '7: Help is the same width as Settings');
   await go(p, '#/today', '.today-hero');
   const stripe = await p.$eval('.side-deck:not(.side-new)', e => { const c = getComputedStyle(e, '::before'); return { w: c.width, br: c.borderRadius }; });
   ok(stripe.w === '3px', '1 (unchanged): sidebar deck marker is still a 3px stripe (' + JSON.stringify(stripe) + ')');
