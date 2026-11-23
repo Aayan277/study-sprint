@@ -373,6 +373,9 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s-3);margin-bottom:var(--s-3)}
 .sec-head h2{margin:0}
 .sec-head .link{padding:4px 6px;min-height:32px}
+/* One look for text links: accent colour, no underline, a "→" when it opens another screen */
+.sec-head .link{color:var(--accent-text)}
+@media (hover:hover) and (pointer:fine){.sec-head .link:hover:not(:disabled){color:var(--accent-text)}}
 .exams{display:grid;gap:var(--s-2)}
 /* An exam card: the deck's colour as a dot, the days as plain text, one bar, and the whole card opens Exam prep
    (the empty button laid over it; the buttons that do something else sit above that one). */
@@ -2498,7 +2501,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .wd i .ico{width:11px;height:11px;stroke-width:2.4;background:var(--surface-1);border-radius:50%}
 .wd.rest i .ico{background:none;stroke-width:2.2}
 .frz-note{margin-top:var(--s-2)}
-.pgrid .frz-note .link,.frz-note .link{display:inline;padding:0;min-height:24px;font-size:inherit;color:var(--accent-text);text-decoration:underline;text-underline-offset:2px}
+.pgrid .frz-note .link,.frz-note .link{display:inline;padding:0;min-height:24px;font-size:inherit;color:var(--accent-text);text-decoration:none}
 /* the study calendar */
 .cal-grid i.frz,.cal-key i.frz{background-image:var(--hatch);box-shadow:inset 0 0 0 1px var(--easy)}
 .cal-grid i.rest,.cal-key i.rest{background-image:var(--dots);background-size:4px 4px;background-position:1px 1px}
@@ -3136,7 +3139,7 @@ main[data-route="stats"] .ed-unit .ed-body .card{padding-top:calc(var(--s-4) + 2
 .aw-plus{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text)}
 
 /* Links to Privacy, Terms and Contact in Settings → About and under the sign-up form */
-.set-row p a,#legalNote a{color:var(--accent-text);text-decoration:underline;text-underline-offset:2px}
+.set-row p a,#legalNote a{color:var(--accent-text);text-decoration:none}
 
 /* ---- Help page (#/help, js/help.js) ---- */
 a.back{text-decoration:none}

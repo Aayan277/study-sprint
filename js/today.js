@@ -136,7 +136,7 @@ export async function renderToday(el) {
       ${noExam.length ? `
       <div class="exam-add"><button type="button" class="exam-chip" id="addExamBtn" aria-haspopup="dialog">${icon('calendar')} Add exam date</button></div>` : ''}${exams.length || noExam.length ? '</div>' : ''}
       <section class="section" aria-labelledby="tdTitle">
-        <div class="sec-head"><h2 id="tdTitle">Your decks</h2><a class="link" href="#/decks">All decks</a></div>
+        <div class="sec-head"><h2 id="tdTitle">Your decks</h2><a class="link" href="#/decks">All decks →</a></div>
         <div class="tdecks">${top.map(d => deckRow(d, new Set(exams.map(e => e.deck.id)))).join('')}</div>
       </section>`}`;
     wire(c);
