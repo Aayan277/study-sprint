@@ -331,9 +331,8 @@ await p.reload(); await p.waitForSelector('#deckGrid .deck');
 // ---------- B4 on a computer: tiles keep their own height ----------
 const tiles = () => p.$$eval('#deckGrid > .deck', d => d.map(x => { const r = x.getBoundingClientRect(); return { y: Math.round(r.y), h: Math.round(r.height) }; }));
 let t = await tiles(); const row1 = t.filter(x => x.y === t[0].y);
-ok(row1.length >= 3, 'three tiles in a row at 1440: ' + row1.length);
-const rowMates = await p.evaluate(() => { const ds = [...document.querySelectorAll('#deckGrid > .deck')].map(d => { const r = d.getBoundingClientRect(); return { y: Math.round(r.y), h: Math.round(r.height) }; }); const byRow = {}; for (const d of ds) (byRow[d.y] ||= []).push(d.h); return Object.values(byRow).some(hs => new Set(hs).size > 1); });
-ok(rowMates, 'in at least one row, tiles of different heights sit side by side');
+ok(row1.length === 1, 'Original on a computer: one deck per row at 1440: ' + row1.length);
+ok(await p.evaluate(() => { const g = document.querySelector('#deckGrid').getBoundingClientRect(); return [...document.querySelectorAll('#deckGrid > .deck')].every(d => Math.abs(d.getBoundingClientRect().width - g.width) < 2); }), 'the rows are the full width of the list');
 await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('compactDecks', false); });
 await p.reload(); await p.waitForSelector('#deckGrid .deck');
 ok(await p.evaluate(() => { const byRow = {}; for (const d of document.querySelectorAll('#deckGrid > .deck')) { const r = d.getBoundingClientRect(); (byRow[Math.round(r.y)] ||= []).push(Math.round(r.height)); } return Object.values(byRow).every(hs => new Set(hs).size === 1); }), 'off: tiles in a row all stretch to the same height, as before');
