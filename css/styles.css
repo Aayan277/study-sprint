@@ -3451,7 +3451,7 @@ main h2[tabindex="-1"]{outline:none}
 /* Import preview: on a computer each card's front and back sit side by side */
 @media (min-width:1024px){
   .pcells{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:var(--s-2)}
-  .pcells > :not(textarea){grid-column:1 / -1}
+  .pcells > :not(textarea),.pcells > textarea[data-side="cloze"]{grid-column:1 / -1}
 }
 
 /* Instant tooltip (js/ui.js initHints): a name, and the single key as a small cap */
