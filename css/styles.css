@@ -284,7 +284,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 
 /* Text boxes: darker than the card they sit on, with a 3:1 edge so they can be seen */
 .field input,.field select,.field textarea,.select,.row-form input,.br-controls input,.br-controls select,.typeform input,#pasteBox,.rich,
-.stepper input,.num-box,.inline-num input,.adv-row input[type=text],.easy-day select{
+.stepper input,.num-box,.inline-num input,.adv-row input[type=text],.easy-day select,#calPick{
   border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken);color:var(--text);transition:border-color var(--t-fast),box-shadow var(--t-fast)}
 .field input:focus,.field select:focus,.field textarea:focus,.br-controls input:focus,.br-controls select:focus,.row-form input:focus,
 #pasteBox:focus,.typeform input:focus,.rich:focus,.adv-row input:focus,.pcells textarea:focus{
@@ -1386,6 +1386,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .cal-grid i[data-t]{cursor:pointer}
 .cal-grid i.today{outline:1.5px solid var(--text);outline-offset:1px}
 .cal-grid i.sel{outline:2px solid var(--accent-text);outline-offset:1px}
+.cal-pick input{margin-left:var(--s-2);padding:6px 10px;border-radius:var(--r-sm);font-size:var(--fs-sm)}
 .cal-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
 
 /* ---------- 14. Settings ---------- */

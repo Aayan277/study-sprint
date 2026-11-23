@@ -300,7 +300,9 @@ export async function renderStats(el) {
     reviewable: () => D.hardest.filter(h => !isHidden(h.card, now)),       // "Review these" skips suspended and buried cards
     leechCount: () => cards.filter(c => (c.tags || []).includes('leech')).length,
     total30: () => D.perDay.reduce((n, d) => n + d.total, 0),
-    cal: () => calendarFromDays(pickedDays, now, 53, { rest, from: firstAnswerTime(pickedDays) }),
+    // On a computer the card is wide enough for the whole past year, so the weeks before the first study day show as empty squares.
+    // A phone opens on the first study month, so a new account does not scroll through a year of empty squares.
+    cal: () => calendarFromDays(pickedDays, now, 53, matchMedia('(min-width:1024px)').matches ? { rest } : { rest, from: firstAnswerTime(pickedDays) }),
     buttons: () => buttonCounts(recent, now),
     hours: () => hourly(recent, now),
     bands: () => difficultyBands(cardStates)
