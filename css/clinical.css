@@ -573,7 +573,7 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.side-set,.side-help){padding:0;border-radius:var(--r-sm)}
 
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main{padding:32px 40px 56px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{max-width:1120px;margin:0 auto}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{max-width:var(--page-w,1120px);margin:0 auto}
   /* Today's page width and its exams column: section 6 */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams{grid-template-columns:1fr!important}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams .exam-row + .exam-row{box-shadow:inset 0 1px 0 var(--line)!important}

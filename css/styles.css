@@ -1644,7 +1644,7 @@ img[data-media][hidden]{display:none}
 /* The panel divider (js/panel-resize.js) is a keyboard stop, so it must not exist where there is no side panel: phones and tablets under 1024px */
 #panelResizer{display:none}
 @media (min-width:1024px){
-  :root{--side:232px}
+  :root{--side:232px;--page-w:1120px}
   /* The sidebar: logo and gear at the top, the four sections below */
   .top{position:fixed;left:0;top:0;width:var(--side);background:var(--surface-sunken);border-right:1px solid var(--line);border-bottom:0;backdrop-filter:none;-webkit-backdrop-filter:none}
   .top-in{max-width:none;padding:16px 10px 10px 18px}
@@ -1658,11 +1658,11 @@ img[data-media][hidden]{display:none}
   .tab[aria-current="page"]::before{top:9px;bottom:9px;left:0;right:auto;width:2px;height:auto;border-radius:0 2px 2px 0}
   /* Pages: next to the sidebar, roomier. Lists and Stats use the full width; the rest stay readable. */
   main{max-width:none;margin:0 0 0 var(--side);padding:32px 44px 56px}
-  /* One content width for every screen (1120px), so the left edges line up when you switch tabs.
+  /* One content width for every screen (--page-w: 1120px, 1360px on a wide monitor), so the left edges line up when you switch tabs.
      Screens that read better narrow keep their content in a 760px column at the same left edge. */
-  main > .view{max-width:1120px;margin:0 auto}
+  main > .view{max-width:var(--page-w);margin:0 auto}
   /* Original style: every screen starts at the same left edge (the centred 760px and 900px columns used to sit at their own x); only the focused review stays centred */
-  :root:not([data-ui="clinical"]) body:not(.focus) main > .view{margin-left:max(0px,calc((100% - 1120px) / 2));margin-right:auto}
+  :root:not([data-ui="clinical"]) body:not(.focus) main > .view{margin-left:max(0px,calc((100% - var(--page-w)) / 2));margin-right:auto}
   /* (the narrow screens are one centred column: the view itself is capped, not just what is in it, so nothing hangs on the left of an empty page) */
   main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view{max-width:760px}
   :root:not([data-ui="clinical"]) main[data-route="help"] > .view{max-width:760px}
@@ -3452,3 +3452,6 @@ main h2[tabindex="-1"]{outline:none}
 .ui-tip{position:fixed;z-index:30;display:flex;align-items:center;gap:8px;pointer-events:none;padding:6px 10px;border-radius:var(--r-sm);background:var(--surface-3);color:var(--text);box-shadow:var(--e-2);font:500 var(--fs-xs)/1.35 var(--f-ui);white-space:nowrap}
 .ui-tip[hidden]{display:none}
 .ui-tip kbd{font:600 var(--fs-2xs)/1.5 var(--f-num);padding:0 5px;border-radius:4px;border:1px solid var(--line-strong);color:var(--text-2)}
+
+/* Wide monitors: the wide pages grow; the max width and the shared left edge both use --page-w, so they stay in step */
+@media (min-width:1680px){:root{--page-w:1360px}}
