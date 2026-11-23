@@ -162,7 +162,7 @@ let chips = await p.$$eval('#xdDeck option', o => o.map(x => x.value));
 ok([...chips].sort().join() === 'econ,law,span,zed', 'the Deck dropdown offers courses with cards and no exam (not the one with an exam, the empty one, or subdecks): ' + chips.join());
 ok(chips[0] === 'law' && await p.inputValue('#xdDeck') === 'law', 'largest first, and the first is preselected');
 const optText = await p.$eval('#xdDeck', e => e.textContent);
-ok(!optText.includes('Cell Biology') && !optText.includes('sample'), 'and not for Cell Biology or the sample deck');
+ok(!optText.includes('Cell Biology') && !optText.includes('Sample deck'), 'and not for Cell Biology or the sample deck');
 await p.click('.sheet-x'); await p.waitForFunction(() => !document.getElementById('sheet').open);
 let taps = 0;
 await p.click('#addExamBtn'); taps++; await p.waitForSelector('#xdForm');
