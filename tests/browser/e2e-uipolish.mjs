@@ -385,12 +385,12 @@ for (const ui of ['original', 'clinical']) {
     await go(d, hash, wait);
     const [l, r, w] = await gaps('main > .view');
     // (round 4: in the Original style the narrow columns sit on the same left edge as Today; Clinical keeps them centred)
-    ok(ui === 'original' ? Math.abs(l - leftToday) <= 2 && w <= 1040 : Math.abs(l - r) <= 2 && w <= 1040 && l > 40, `M9 (${ui}): ${name} is a ${ui === 'original' ? 'left-aligned' : 'centred'} column (left ${l}px, right ${r}px, ${w}px wide)`);
+    ok(ui === 'original' ? Math.abs(l - leftToday) <= 2 && w <= 1000 : Math.abs(l - r) <= 2 && w <= 1000 && l > 40, `M9 (${ui}): ${name} is a ${ui === 'original' ? 'left-aligned' : 'centred'} column (left ${l}px, right ${r}px, ${w}px wide)`);
   }
   await go(d, '#/browse', '.crow');
-  { const [l, r, w] = await gaps('main > .view'); ok((ui === 'original' ? Math.abs(l - leftToday) <= 2 : Math.abs(l - r) <= 2) && w <= 1040, `M9 (${ui}): Browse is ${ui === 'original' ? 'left-aligned' : 'centred'} and at most 1040px wide (left ${l}, right ${r}, ${w}px)`); }
+  { const [l, r, w] = await gaps('main > .view'); ok((ui === 'original' ? Math.abs(l - leftToday) <= 2 : Math.abs(l - r) <= 2) && w <= 900, `M9 (${ui}): Browse is ${ui === 'original' ? 'left-aligned' : 'centred'} and at most 900px wide (left ${l}, right ${r}, ${w}px)`); }
   await go(d, '#/deck/B', '.crow');
-  { const w = await d.$eval('#browser', e => Math.round(e.getBoundingClientRect().width)); ok(w <= 1040, `M9 (${ui}): the deck's card list is at most 1040px wide (${w}px)`); }
+  { const w = await d.$eval('#browser', e => Math.round(e.getBoundingClientRect().width)); ok(w <= 900, `M9 (${ui}): the deck's card list is at most 900px wide (${w}px)`); }
   // what stays wide on purpose
   await go(d, '#/decks', '.deck'); { const [, , w] = await gaps('main > .view'); ok(w >= 1000, `M9 (${ui}): the Decks grid stays full width (${w}px)`); }
   await go(d, '#/stats', 'h1'); { const [, , w] = await gaps('main > .view'); ok(w >= 1000, `M9 (${ui}): Stats stays full width (${w}px)`); }
@@ -553,7 +553,7 @@ for (const w of [1280, 1440, 1680]) {
   const r = await d.evaluate(() => { const m = document.querySelector('main').getBoundingClientRect(); const box = e => { const r = e?.getBoundingClientRect(); return r ? [Math.round(r.left), Math.round(r.right)] : null; };
     return { main: [Math.round(m.left), Math.round(m.right)], sub: box(document.querySelector('.subdecks-page')), list: box(document.querySelector('#browser')), view: box(document.querySelector('main > .view')) }; });
   ok(r.sub && r.list && r.sub[1] === r.list[1] && r.sub[0] === r.list[0], `Clinical deck page at ${w}px: Subdecks and Cards share one width (${r.sub}, ${r.list})`);
-  ok(r.list[1] - r.list[0] <= 1040 && r.view[1] - r.view[0] <= 1240, `Clinical deck page at ${w}px: the column is at most 1040px (${r.list[1] - r.list[0]}px)`);
+  ok(r.list[1] - r.list[0] <= 900 && r.view[1] - r.view[0] <= 1240, `Clinical deck page at ${w}px: the column is at most 900px (${r.list[1] - r.list[0]}px)`);
   const gl = r.view[0] - r.main[0], gr = r.main[1] - r.view[1];
   ok(Math.abs(gl - gr) <= 2, `Clinical deck page at ${w}px: it is centred (${gl}px / ${gr}px)`);
   await d.context().close();

@@ -161,9 +161,7 @@ function calendarHTML(cal, now) {
   return `
     <section class="card section cal-card" aria-labelledby="calTitle">
       <div class="mhead"><h2 id="calTitle">Study calendar</h2>
-        <span class="cal-sum"><span class="muted small">${plural(cal.daysStudied, 'day')} in the past year · best streak ${plural(cal.longest, 'day')}</span>
-          <button type="button" class="btn ghost small cal-pickbtn" id="calPickBtn" aria-label="Pick a day" title="Pick a day">${icon('calendar')}</button>
-          <input type="date" id="calPick" class="cal-date sr-only" tabindex="-1" aria-hidden="true" aria-label="Pick a day" min="${esc(shown[0] ? dayKey(shown[0].time) : '')}" max="${esc(shown.length ? dayKey(shown[shown.length - 1].time) : '')}"></span></div>
+        <span class="muted small">${plural(cal.daysStudied, 'day')} in the past year · best streak ${plural(cal.longest, 'day')}</span></div>
       <div class="cal" role="img" aria-label="${esc(`Studied on ${cal.daysStudied} of the last ${cal.daysShown} days, ${plural(cal.answers, 'answer')} in all. Longest streak ${plural(cal.longest, 'day')}.${cal.weeks.some(w => w.some(d => d.frozen)) ? ' Days covered by a streak freeze have a diagonal hatch.' : ''}`)}">
         <span class="cal-wd" aria-hidden="true"><b></b><b>Mon</b><b></b><b>Wed</b><b></b><b>Fri</b><b></b><b></b></span>
         <div class="cal-scroll" id="calScroll">
@@ -171,6 +169,7 @@ function calendarHTML(cal, now) {
         </div>
       </div>
       <div class="cal-foot">
+        <label class="cal-pick muted small">Pick a day <input type="date" id="calPick" min="${esc(shown[0] ? dayKey(shown[0].time) : '')}" max="${esc(shown.length ? dayKey(shown[shown.length - 1].time) : '')}"></label>
         <span class="muted small" id="calInfo" aria-live="polite"></span>
         <span class="cal-key muted small" aria-hidden="true">Less <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> More</span>
         <span class="cal-key cal-key2 muted small" aria-hidden="true"><i class="lv0 frz"></i> Streak freeze <i class="lv0 rest"></i> Day off</span>
@@ -212,7 +211,6 @@ function wireCalendar(el) {
   });
   // The keyboard way (WCAG 2.1.1): the "Pick a day" date box shows the same line, and the square is marked and scrolled into view.
   const pick = el.querySelector('#calPick');
-  el.querySelector('#calPickBtn')?.addEventListener('click', () => { try { pick.showPicker(); } catch { pick.classList.remove('sr-only'); pick.removeAttribute('aria-hidden'); pick.removeAttribute('tabindex'); pick.focus(); } });
   pick?.addEventListener('change', () => {
     const cell = [...grid.querySelectorAll('i[data-t]')].find(c => dayKey(+c.dataset.t) === pick.value);
     if (!cell) { if (pick.value) el.querySelector('#calInfo').textContent = 'No calendar square for that day.'; return; }
@@ -466,8 +464,7 @@ export async function renderStats(el) {
   const layout = normaliseLayout(settings.statsLayout);
   // With one course picked, its readiness card and Mastery sit side by side at the top, as long as Mastery is still last.
   const masteryUp = !editing && !!course && !layout.hidden.includes('mastery') && layout.order[layout.order.length - 1] === 'mastery';
-  // The calendar waits until there are 3 days with answers: before that it is a year of empty squares.
-  const shown = visibleOrder(layout, masteryUp ? ['mastery'] : []).filter(id => id !== 'cal' || editing || D.cal.daysStudied >= 3);
+  const shown = visibleOrder(layout, masteryUp ? ['mastery'] : []);
   const rows = pairRows(layout, shown);
   const width = widths(layout, shown);
   const tag = (html, attrs) => html.replace(/^\s*<(\w+)/, `<$1 ${attrs}`);

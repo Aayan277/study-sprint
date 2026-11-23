@@ -51,10 +51,9 @@ const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect();
   ok(code === accent, '6 (unchanged): deck code is still the accent colour (' + code + ' vs ' + accent + ')');
   await go(p, '#/help', 'main[data-route="help"] > .view');
   const hw = (await box(p, 'main[data-route="help"] > .view')).w;
-  const hin = await p.$$eval('main[data-route="help"] > .view > :not(.screen-head):not(.back)', es => Math.max(...es.map(e => e.getBoundingClientRect().width)));
-  ok(hin <= 760.5 && hin > 500, '7: PC Help content is at most 760px wide, like Settings (' + hin + ')');
+  ok(hw <= 760.5 && hw > 500, '7: PC Help page is at most 760px wide (' + hw + ')');
   await go(p, '#/settings', 'main[data-route="settings"] > .view');
-  ok(Math.abs((await box(p, 'main[data-route="settings"] > .view')).w - hw) < 1, '7: Help uses the same page column as Settings');
+  ok(Math.abs((await box(p, 'main[data-route="settings"] > .view')).w - hw) < 1, '7: Help is the same width as Settings');
   await go(p, '#/today', '.today-hero');
   const stripe = await p.$eval('.side-deck:not(.side-new)', e => { const c = getComputedStyle(e, '::before'); return { w: c.width, br: c.borderRadius }; });
   ok(stripe.w === '3px', '1 (unchanged): sidebar deck marker is still a 3px stripe (' + JSON.stringify(stripe) + ')');
@@ -123,7 +122,6 @@ const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect();
   ok(cdom.indexOf('prepBtn') < cdom.indexOf('reviewBtn'), '3 (Clinical): DOM order is the old one (Exam prep first), same as shown on a computer: ' + cdom.join(', '));
   await go(p, '#/help', 'main[data-route="help"] > .view');
   ok((await box(p, 'main[data-route="help"] > .view')).w > 800, '7 (Clinical unchanged): Clinical Help page keeps its width');
-  ok(await p.$$eval('main[data-route="help"] > .view > :not(.screen-head):not(.back)', es => Math.max(...es.map(e => e.getBoundingClientRect().width))) <= 760.5, '7 (Clinical): Help content is at most 760px wide, like Settings');
   await p.close();
 }
 

@@ -391,7 +391,7 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1600, 900], [1920,
     const st = await page.evaluate(() => { const v = document.querySelector('main > .view').getBoundingClientRect(); const sw = [...document.querySelectorAll('#advanced .switch')].map(e => e.getBoundingClientRect().right);
       return { btns: ['optNo', 'optYes'].map(id => Math.round(document.getElementById(id).getBoundingClientRect().width)), sw: Math.max(...sw), viewW: Math.round(v.width), viewR: Math.round(v.right) }; });
     ok(st.btns.every(x => x > 0 && x <= 200), `${tag}: the in-page confirm's buttons are not stretched (${st.btns.join(', ')}px)`);
-    ok(st.viewW <= 1040 && st.sw <= st.viewR + 1, `${tag}: Settings is a readable column (${st.viewW}px) and its switches sit inside it`);
+    ok(st.viewW <= 980 && st.sw <= st.viewR + 1, `${tag}: Settings is a readable column (${st.viewW}px) and its switches sit inside it`);
     // Every control in a Settings row is within about 120px of its label: the gap between the control's box and the box of
     // the nearest label text in the same row (the row's name, or a select's own day name). Text boxes come from a Range,
     // so a description that wraps across the row does not count as "next to" a switch at the far edge.

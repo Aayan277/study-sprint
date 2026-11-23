@@ -211,6 +211,7 @@ function optsFor(card, now = Date.now()) {
   return examOptions(deckSchedulerOptions(G.settings, deck), deck, now);
 }
 
+const MOUSE = matchMedia('(hover: hover) and (pointer: fine)');
 function drawGuide() {
   const { el, cards, i, flipped } = G;
   if (i >= cards.length) return drawGuideDone();
@@ -225,22 +226,31 @@ function drawGuide() {
   const fullPath = deckPath(G.decks, card.deckId);
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}</span>`;
   const backSize = answerSize(plainText(card.back));
-  // The page frame (count and Skip) is drawn once; only the card below it changes between cards.
-  if (!el.querySelector('#gStage')) {
+  // The page frame (count, Skip, and the #coach status line) is drawn once; only its text changes between cards, so a screen reader
+  // hears the new step instead of a status region that was thrown away and rebuilt.
+  if (!el.querySelector('#coach')) {
     el.innerHTML = `
     <div class="welcome guide">
-      <div class="wl-top"><span class="wl-count mono" id="gCount" role="status"></span><button class="link" type="button" id="gSkip">Skip the walk-through</button></div>
+      <div class="wl-top"><span class="wl-count mono" id="gCount"></span><button class="link" type="button" id="gSkip">Skip the walk-through</button></div>
+      <p class="coach" id="coach" role="status" aria-atomic="true"><b id="coachN"></b><span id="coachT"></span><span class="coach-key" id="coachK"></span></p>
       <div id="gStage"></div>
     </div>`;
     $('gSkip').addEventListener('click', () => { const api = G.api; G = null; setFocusMode(false); leave(api); });
   }
   $('gCount').textContent = `Card ${i + 1} of ${cards.length}`;
+  $('coachN').textContent = flipped ? '2' : '1';
+  $('coachT').textContent = flipped
+    ? ' Now rate how well you knew it. This tells the app when to show the card again.'
+    : ` Read the question, try to recall the answer, then ${MOUSE.matches ? 'click the card or press Space' : 'tap the card'} to flip it.`;
+  $('coachK').textContent = flipped ? 'Again: forgot · Hard: barely · Good: got it · Easy: instantly' : '';
+  $('coachK').hidden = !flipped;
   $('gStage').innerHTML = `
       <article class="flash rv-card${flipped ? ' flipped' : ''}" id="flash" ${flipped ? 'tabindex="-1"' : 'tabindex="0" aria-labelledby="gQ" aria-describedby="gHint"'}>
         <div class="rv-turn">
           <div class="rv-face rv-front" ${flipped ? HIDDEN : ''}>${deckLabel}
             <div class="flash-front${size}" id="gQ">${front}</div>
-            <span class="sr-only" id="gHint">Press Space or Enter to show the answer</span></div>
+            <span class="sr-only" id="gHint">Press Space or Enter to show the answer</span>
+            <p class="flash-hint">${MOUSE.matches ? 'Click or press Space to flip' : 'Tap to flip'}</p></div>
           <div class="rv-face rv-back" tabindex="-1" role="region" aria-label="Answer" ${flipped ? '' : HIDDEN}>${deckLabel}
             ${occ ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
             <div class="flash-ans"><div class="flash-back${backSize}${occ ? ' occ-back' : ''}">${occ

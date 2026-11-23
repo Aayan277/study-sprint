@@ -350,6 +350,8 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .th-main .ring-in small{font-size:var(--fs-2xs);color:var(--text-2);margin-top:3px}
 .th-text{display:flex;flex-direction:column;gap:2px;min-width:0}
 .th-big{font-size:var(--fs-xl);font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.th-sub{font-size:var(--fs-sm);color:var(--text-2)}
+.th-sub b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
 .streak{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin:var(--s-4) 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2)}
 .streak .ico{width:18px;height:18px;color:var(--text-3)}
 .streak b{color:var(--text);font-size:var(--fs-md)}
@@ -455,6 +457,20 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 :root:not([data-ui="clinical"]) .deck-go:not(.done),:root:not([data-ui="clinical"]) .deck-go.lead:not(.done){background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);color:var(--text-2)}
 @media (hover:hover) and (pointer:fine){:root:not([data-ui="clinical"]) .deck-go:not(.done):hover{background:var(--accent);box-shadow:none;color:var(--on-accent)}}
 :root:not([data-ui="clinical"]) .deck-go:not(.done):focus-visible{background:var(--accent);box-shadow:none;color:var(--on-accent)}
+/* Phone: the compact rows keep the name, ring, menu and play button on one line (about 115px a row instead of 230px; the play button stays 44px) */
+@media (max-width:700px){
+  :root:not([data-ui="clinical"]) .decks.compact .deck{grid-template-columns:minmax(0,1fr) auto auto auto;align-items:center;gap:0 8px;padding:12px 10px 12px 14px}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-open{grid-row:1;grid-column:1}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-ring{grid-row:1;grid-column:2;margin:0}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-ring .ring{width:36px!important;height:36px!important}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-ring .ring-in .mono{font-size:.625rem}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-ring small{display:none}
+  :root:not([data-ui="clinical"]) .decks.compact .deck > .icon-btn{grid-row:1;grid-column:3}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-act{grid-row:1;grid-column:4;margin:0;align-self:center;justify-self:end}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-go{width:44px;height:44px}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-go.add{width:auto}
+  :root:not([data-ui="clinical"]) .decks.compact .deck .subdecks{grid-column:1 / -1;grid-row:2}
+}
 .decks.compact .subdecks{margin-top:var(--s-2)}
 .decks.compact .subdecks summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:36px;color:var(--text-2);font-weight:500}
 .decks.compact .subdecks summary::-webkit-details-marker{display:none}
@@ -476,6 +492,8 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 :root:not([data-ui="clinical"]) .deck-counts .due:not(.zero){background:none;box-shadow:none;padding:0;color:var(--text);font-weight:600}
 :root:not([data-ui="clinical"]) .deck-counts .due:not(.zero) b{color:var(--text)}
 .deck .icon-btn{width:36px;height:36px}
+.deck-ring{grid-row:1;grid-column:2;margin-top:2px}
+.deck-ring small{font-size:.625rem;font-weight:500;color:var(--text)}
 .deck-act{grid-column:1 / -1;align-self:end;margin:var(--s-3) var(--s-3) 2px 0}
 .deck-act .btn{width:100%}
 .deck-done{display:flex;align-items:center;justify-content:center;gap:6px;min-height:34px;font-size:var(--fs-sm);color:var(--good)}
@@ -989,6 +1007,8 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .mode:has(input:checked),.skin[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint)}
 .mode:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
 .mode-ex{font-weight:700;font-size:1.25rem;line-height:1.3;margin-bottom:2px}
+.mode-ex .clock{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-weight:600}
+.mode-ex .hearts{color:var(--again);letter-spacing:3px;font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:1.05rem}
 .mode-name{font-weight:600}
 .mode-best{font-size:var(--fs-sm);color:var(--text-2)}
 .mode-best b{color:var(--text);font-weight:600}
@@ -1618,11 +1638,14 @@ img[data-media][hidden]{display:none}
   main{max-width:none;margin:0 0 0 var(--side);padding:32px 44px 56px}
   /* One content width for every screen (1120px), so the left edges line up when you switch tabs.
      Screens that read better narrow keep their content in a 760px column at the same left edge. */
-  main > .view{max-width:var(--page-w);margin:0 auto}
+  main > .view{max-width:1120px;margin:0 auto}
   /* Original style: every screen starts at the same left edge (the centred 760px and 900px columns used to sit at their own x); only the focused review stays centred */
+  :root:not([data-ui="clinical"]) body:not(.focus) main > .view{margin-left:max(0px,calc((100% - 1120px) / 2));margin-right:auto}
   /* (the narrow screens are one centred column: the view itself is capped, not just what is in it, so nothing hangs on the left of an empty page) */
-  main:is([data-route="play"],[data-route="settings"],[data-route="import"],[data-route="help"]) > .view > :not(.screen-head):not(.back){max-width:760px}   /* inner forms stay narrow, on the page's left edge */
+  main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view{max-width:760px}
+  :root:not([data-ui="clinical"]) main[data-route="help"] > .view{max-width:760px}
   main[data-route="review"] > .view{max-width:780px}
+  main[data-route="browse"] > .view{max-width:900px}
   body.has-side main{margin-right:var(--panel)}
   .toast,body.welcome:not(.focus) .toast{left:calc(50% + var(--side) / 2)}
   .toast{top:auto;bottom:84px}
@@ -1644,6 +1667,7 @@ img[data-media][hidden]{display:none}
   /* Today: the ring and streak on the left, the big Start button beside them */
   .today-hero{display:grid;grid-template-columns:minmax(0,1fr) 340px;column-gap:var(--s-8);align-items:center;padding:var(--s-8)}
   .th-big{font-size:2.25rem}
+  .th-sub{font-size:var(--fs-base)}
   .today-hero .ring{width:112px!important;height:112px!important}      /* the ring is drawn at 84px (inline); it is larger here */
   .today-hero .th-main .ring-in b{font-size:2rem}
   .exams{grid-template-columns:repeat(auto-fill,minmax(440px,1fr))}
@@ -1724,6 +1748,7 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
   :root:has(main[data-route="browse"]){--panel:clamp(360px,var(--panel-user,440px),70vw)}
   main[data-route="deck"]{padding:28px 32px 56px}
   html[data-rail="on"] main[data-route="deck"]{margin-left:calc(var(--side) + 240px)}
+  main[data-route="deck"] > .view{max-width:900px}   /* the card list reads best at about 900px; it is centred in what is left beside the side panel */
   main[data-route="deck"] .back{display:none}
   main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3)}
   main[data-route="deck"] .br-controls{grid-template-columns:1fr 1fr}
@@ -1798,6 +1823,8 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 .wl-opt-d{font-size:var(--fs-sm);color:var(--text-2);line-height:1.4}
 /* The hint above the card in the guided review */
 .coach{margin:0;padding:var(--s-3) var(--s-4);border-radius:var(--r-md);background:var(--accent-tint);border:1px solid var(--accent-line);color:var(--text);font-size:var(--fs-base);line-height:1.4}
+.coach b{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:8px;border-radius:50%;background:var(--accent);color:var(--on-accent);font:600 var(--fs-xs) var(--f-num)}
+.coach-key{display:block;margin-top:4px;font-size:var(--fs-sm);color:var(--text-2)}
 .guide .flash{min-height:min(50dvh,420px)}
 .guide #gStage{display:contents}
 .wl-done{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);border:1px solid var(--accent-line)}
@@ -2042,6 +2069,8 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 .fr-next p{margin:0 0 10px;color:var(--text-2);font-size:var(--fs-sm)}
 .wl-done.fr-done{width:52px;height:52px}
 .fr-emptydeck .td-counts{color:var(--text-3)}
+.fr-add{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px 0 10px;border-radius:var(--r-pill);border:1px dashed var(--accent-line);color:var(--accent-text);font-size:var(--fs-sm);font-weight:600}
+.td-go .fr-add .ico{width:15px;height:15px;padding:0;background:none;box-shadow:none}
 .fr-how{display:inline-block;margin-top:14px;color:var(--accent-text);font-size:var(--fs-sm);font-weight:500;text-decoration:none}
 
 /* Install card on Today (js/install.js) */
@@ -2294,6 +2323,8 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-foot{display:grid;flex:none;margin-top:auto;border-top:1px solid var(--line);padding:10px 10px 12px;gap:2px}
   .side-streak{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--r-sm);color:var(--text);text-decoration:none}
   @media (hover:hover) and (pointer:fine){.side-streak:hover{background:var(--surface-2)}}
+  .side-streak .ring-in .ico{width:13px;height:13px;color:var(--text-3)}
+  .side-streak.kept .ring-in .ico{color:var(--hard)}
   .side-streak .ring-fg{filter:none}
   .side-st{display:grid;gap:1px;line-height:1.25;min-width:0}
   .side-st b{font-size:var(--fs-sm);font-weight:600;letter-spacing:-.01em}
@@ -2449,6 +2480,8 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .cal-key2{margin-left:auto;white-space:nowrap}
 .cal-key2 i{margin:0 3px 0 8px}
 .cal-key2 i:first-child{margin-left:0}
+/* the sidebar footer: a small snowflake while a freeze was used in the last 7 days */
+.side-snow{width:12px;height:12px;margin-left:5px;vertical-align:-1px;color:var(--easy)}
 /* Original style: a screen that already shows the streak (Today, the end of a session) does not show it a second time in the sidebar */
 :root:not([data-ui="clinical"]) body:has(.today-hero .streak,.finish-next .streak) .side-streak{display:none}
 /* the "Your streak" sheet */
@@ -2519,7 +2552,12 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 
 /* ---------- 26. Counts and decks (Round 2: A2 due numbers, A4 deck page, A6 empty deck / % ring / ⋯ menu) ---------- */
 /* A deck tile's ring: "43%" inside, "mastered" under it. An empty deck has no ring and offers Add cards instead of a tick. */
+.deck-ring{display:grid;justify-items:center;gap:3px;margin-top:0}
+.deck-ring .ring-in .mono{font-size:.75rem;font-weight:600;letter-spacing:-.03em;color:var(--text)}
+.deck-ring .ring-in small{font-size:.5625rem;font-weight:500;color:var(--text-2);margin:0 0 0 1px;letter-spacing:0}
 .deck .icon-btn{grid-column:3;grid-row:1}
+.deck-go.add{width:auto;height:40px;padding:0 16px;border-radius:var(--r-pill);font:600 var(--fs-sm) var(--f-ui);white-space:nowrap;text-decoration:none}
+@media (hover:hover) and (pointer:fine){.deck-go.add:hover{background:var(--accent-line)}}
 /* A deck page's numbers: what is held back until tomorrow, and the shared-limit note */
 .held-note{margin:var(--s-2) 0 0;font-size:var(--fs-sm);color:var(--text-2)}
 .held-note span{color:var(--text-2)}
@@ -3166,7 +3204,7 @@ a.back{text-decoration:none}
   .deck .icon-btn{width:44px;height:44px}
   .card-info summary,.how-score summary,.opt-fold summary,.chart-table > summary{min-height:44px}
   .chart-table > summary{display:list-item;padding-block:13px}
-  .deck-search input,.br-controls input,.br-controls select,.skin,.adv-row input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not(.switch),.adv-row select,.easy-day select,.set-row :is(input[type=number],input[type=date],input[type=time]){min-height:44px!important}
+  .deck-search input,.br-controls input,.br-controls select,.skin,#calPick,.cal-pick input,.adv-row input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not(.switch),.adv-row select,.easy-day select,.set-row :is(input[type=number],input[type=date],input[type=time]){min-height:44px!important}
   input[type=range]{min-height:44px}
 }
 /* Original dark: the "Young" mastery segment is 3:1 or more against its track (Clinical has its own, in clinical.css) */
@@ -3177,6 +3215,7 @@ a.back{text-decoration:none}
 .fr-how{display:inline-flex;align-items:center;min-height:24px}
 .deck-open{box-sizing:border-box;min-height:24px}
 .side-head{min-height:24px}
+#calPick:focus,#calPick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .set-nav a[aria-current]{border-color:var(--accent);background:var(--accent-tint);color:var(--text)}
 main h2[tabindex="-1"]{outline:none}
 #syncForm > .field:first-of-type{margin-top:var(--s-3)}
@@ -3347,9 +3386,6 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row > span{grid-column:2;grid-row:1}
 }
 
-/* One page width on a computer: every main screen shares it (and so its left and right edge) */
-:root{--page-w:1040px}
-
 /* 4.67 WP-B */
 .deck-counts .hit{color:var(--accent-text)}
 #cardHits{margin:0 0 var(--s-2)}
@@ -3364,59 +3400,3 @@ main h2[tabindex="-1"]{outline:none}
 .anki-sum{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:var(--s-2) 0;font-size:var(--fs-sm)}
 .anki-sum .link{min-height:44px;padding:0 4px;color:var(--accent-text);font-weight:500}
 @media (min-width:1024px) and (pointer:fine){.anki-sum .link{min-height:36px}}
-
-/* 4.68 WP-SPO */
-.cal-sum{position:relative;display:inline-flex;align-items:center;gap:var(--s-2)}
-.cal-pickbtn{min-width:44px;min-height:44px;padding:0;display:inline-grid;place-items:center}
-.cal-pickbtn svg{width:20px;height:20px}
-.cal-date{position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;pointer-events:none}
-@media (min-width:1024px) and (pointer:fine){.cal-pickbtn{min-width:32px;min-height:32px}}
-.mode-name{font-size:var(--fs-base)}
-.mode-ex{font-weight:500;font-size:var(--fs-sm);color:var(--text-2);margin:0}
-body.welcome > main{width:100%}
-@media (max-width:1023.98px){body.welcome.focus > main{padding-left:16px;padding-right:16px}}
-
-/* UI draft: Decks rows, one Add cards look, full-width lists */
-/* Add cards: one look everywhere (the sidebar's outlined button, scaled to a row) */
-.add-cards-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 14px 0 12px;border-radius:var(--r-sm);background:var(--surface-1);box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--text);font:500 var(--fs-sm)/1 var(--f-ui);text-decoration:none;white-space:nowrap;cursor:pointer;transition:background var(--t-fast),box-shadow var(--t-fast)}
-.add-cards-btn .ico{width:16px;height:16px;color:var(--accent-text);flex:none}
-.add-cards-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@media (hover:hover) and (pointer:fine){.add-cards-btn{min-height:36px}.add-cards-btn:hover{background:var(--surface-2)}}
-/* Decks rows: name and numbers on the left, one action slot (play or Add cards), then the menu always last, so it lines up on every row */
-main[data-route="decks"] .decks{grid-template-columns:minmax(0,1fr);gap:var(--s-2)}
-main[data-route="decks"] .decks.compact .deck{grid-template-columns:minmax(0,1fr) auto 44px;grid-template-rows:auto;column-gap:var(--s-2);row-gap:0;align-items:center;min-height:88px;padding:10px 6px 10px var(--s-4)}
-/* the exam countdown sits beside the name, so a row with one is no taller than the others */
-main[data-route="decks"] .decks.compact .deck-open{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:var(--s-3);align-items:baseline}
-main[data-route="decks"] .decks.compact .deck-open > *{grid-column:1 / -1}
-main[data-route="decks"] .decks.compact .deck-open > .deck-name{grid-column:1;grid-row:2}
-main[data-route="decks"] .decks.compact .deck-open > .exam-badge{grid-column:2;grid-row:2;margin:0;justify-self:end}
-main[data-route="decks"] .decks.compact .deck-open > .deck-code{grid-row:1}
-main[data-route="decks"] .decks.compact .deck-open > .deck-counts{grid-row:3}
-main[data-route="decks"] .decks.compact .deck-open{grid-column:1;grid-row:1}
-main[data-route="decks"] .decks.compact .deck-act{grid-column:2;grid-row:1;margin:0;align-self:center;justify-self:end}
-main[data-route="decks"] .decks.compact .deck > .icon-btn{grid-column:3;grid-row:1;width:44px;height:44px;justify-self:center}
-main[data-route="decks"] .decks.compact .deck .subdecks{grid-column:1 / -1;grid-row:2}
-@media (max-width:1023px){:root:not([data-ui="clinical"]) main[data-route="decks"] .decks.compact .deck-go{width:44px;height:44px}}
-@media (min-width:1024px){
-  main[data-route="decks"] .decks.compact .deck{min-height:88px;padding-left:var(--s-5)}
-  /* the end-of-session screen (not the card itself) keeps the page's left edge */
-  :root:not([data-ui="clinical"]) body:not(.focus) main[data-route="review"] > .view{margin-left:max(0px,calc((100% - var(--page-w)) / 2));margin-right:auto}
-  .tdecks{grid-template-columns:minmax(0,1fr);gap:var(--s-2)}
-}
-
-/* Today draft: compact hero (small ring, streak, big Start), icon-only Options, plain empty-deck row */
-:root:not([data-ui="clinical"]) .today-hero{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-3) var(--s-4);padding:var(--s-4)}
-:root:not([data-ui="clinical"]) .today-hero .th-main{flex:0 0 auto}
-:root:not([data-ui="clinical"]) .today-hero .ring{width:72px!important;height:72px!important}
-:root:not([data-ui="clinical"]) .today-hero .th-main .ring-in b{font-size:1.375rem}
-:root:not([data-ui="clinical"]) .today-hero .streak-btn{margin:0;min-width:0;width:auto;flex:0 1 auto}
-:root:not([data-ui="clinical"]) .today-hero .btn.big{flex:1 1 100%;width:auto}
-:root:not([data-ui="clinical"]) .today-hero .th-done{flex:1 1 240px;min-width:0}
-#optBtn{flex:none}
-@media (min-width:1024px){
-  :root:not([data-ui="clinical"]) .today-hero{flex-wrap:nowrap;padding:var(--s-4) var(--s-5);gap:var(--s-4) var(--s-5)}
-  :root:not([data-ui="clinical"]) .today-hero .btn.big{flex:1 1 auto;min-width:220px}   /* Start fills the row, so the card spans the page like the deck list below it, with no empty gap */
-  :root:not([data-ui="clinical"]) .today-hero .th-done{flex:0 1 auto}
-}
-@media (min-width:1024px) and (pointer:fine){#optBtn{width:36px;height:36px}}
-body:has(.today-hero) .side-streak{display:none}   /* the hero already shows the ring */

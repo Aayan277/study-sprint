@@ -210,6 +210,7 @@
   :root[data-ui="clinical"] .side-exam{background:none;box-shadow:none;color:var(--exam);font-weight:550;padding:0 2px}
   :root[data-ui="clinical"] .side-exam.soon{background:none;box-shadow:none;color:var(--again)}
   :root[data-ui="clinical"] .side-dot{box-shadow:none}
+  :root[data-ui="clinical"] .side-streak.kept .ring-in .ico{filter:none}
   @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .side-streak:hover,:root[data-ui="clinical"] .side-sync:hover,:root[data-ui="clinical"] .side-set:hover,:root[data-ui="clinical"] .side-help:hover,:root[data-ui="clinical"] .side-ib:hover{background:var(--side-on)}}
   :root[data-ui="clinical"] .today-hero{padding:var(--s-6) var(--s-8)}
   :root[data-ui="clinical"] .th-big{font-size:2rem}
@@ -324,6 +325,7 @@
    4. v4.9 additions (all variants)
    ====================================================================== */
 /* "All done for today": no repeated headline, no "0 due · 0 new"; the ring turns a quiet green; extra study is secondary */
+:root[data-ui="clinical"] .today-hero:has(.th-done) .th-sub,
 :root[data-ui="clinical"] .th-done > b{display:none}
 :root[data-ui="clinical"] .today-hero:has(.th-done) .ring-fg{stroke:var(--good)}
 :root[data-ui="clinical"] .ring-check{color:var(--good);width:26px;height:26px}
@@ -351,6 +353,7 @@
 :root[data-ui="clinical"][data-ui="clinical"] .today-hero{padding:var(--s-4);border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line)}
 :root[data-ui="clinical"][data-ui="clinical"] .th-main{gap:var(--s-4)}
 :root[data-ui="clinical"][data-ui="clinical"] .th-big{font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
+:root[data-ui="clinical"][data-ui="clinical"] .th-sub{font-size:var(--fs-sm)}
 /* streak: one quiet line under a hairline instead of a three-line block */
 :root[data-ui="clinical"][data-ui="clinical"] .today-hero .streak{margin:var(--s-4) 0 var(--s-4);padding:var(--s-3) 0 0;border-top:1px solid var(--line);font-size:var(--fs-sm);gap:4px 8px;width:100%}
 :root[data-ui="clinical"][data-ui="clinical"] .today-hero .streak b{font-size:var(--fs-sm)}
@@ -378,6 +381,7 @@
 /* ---------- Decks ---------- */
 :root[data-ui="clinical"][data-ui="clinical"] .deck{box-shadow:0 0 0 1px var(--line);border-radius:var(--r-lg)}
 @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"] .deck:hover{background:var(--surface-1);box-shadow:0 0 0 1px var(--line-strong)}}
+:root[data-ui="clinical"][data-ui="clinical"] .deck-ring .ring-fg{stroke:var(--accent)}
 :root[data-ui="clinical"][data-ui="clinical"] .deck-search input{background:var(--surface-1);border-color:var(--line-strong)}
 :root[data-ui="clinical"][data-ui="clinical"] .deck-sort{box-shadow:0 0 0 1px var(--line)}
 :root[data-ui="clinical"][data-ui="clinical"] .deck-sort button[aria-pressed="true"]{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-strong)}
@@ -408,8 +412,8 @@
   :root[data-ui="clinical"][data-ui="clinical"] .tab[aria-current="page"]{background:var(--surface-1);box-shadow:0 0 0 1px var(--line)}
   :root[data-ui="clinical"][data-ui="clinical"] .tab[aria-current="page"] svg{color:var(--accent-text)}
   :root[data-ui="clinical"][data-ui="clinical"] main{padding:36px 48px 56px}
-  :root[data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view{max-width:var(--page-w);margin:0 auto}
-  :root[data-ui="clinical"][data-ui="clinical"] main:is([data-route="decks"],[data-route="stats"],[data-route="deck"]) > .view{margin:0 auto}
+  :root[data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view{max-width:960px;margin:0}
+  :root[data-ui="clinical"][data-ui="clinical"] main:is([data-route="decks"],[data-route="stats"],[data-route="deck"]) > .view{margin:0}
   /* Today: ring + figures on the left, the Start button (normal width) on the right, streak as a footer line */
   :root[data-ui="clinical"][data-ui="clinical"] .today-hero{grid-template-columns:minmax(0,1fr) 340px;column-gap:var(--s-6);padding:var(--s-5) var(--s-6)}
   :root[data-ui="clinical"][data-ui="clinical"] .today-hero .ring{width:88px!important;height:88px!important}
@@ -418,8 +422,15 @@
   :root[data-ui="clinical"][data-ui="clinical"] .today-hero .streak{grid-column:1 / -1;grid-row:2;margin:var(--s-5) 0 0}
   :root[data-ui="clinical"][data-ui="clinical"] .today-hero .btn.big,
   :root[data-ui="clinical"][data-ui="clinical"] .today-hero .th-done{grid-column:2;grid-row:1;align-self:center}
+  :root[data-ui="clinical"][data-ui="clinical"] .tdecks{grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+  :root[data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck{box-shadow:inset 0 1px 0 var(--line)}
+  :root[data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck:nth-child(-n+2){box-shadow:none}
+  :root[data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck:nth-child(even){box-shadow:inset 1px 0 0 var(--line),inset 0 1px 0 var(--line)}
+  :root[data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck:nth-child(2){box-shadow:inset 1px 0 0 var(--line)}
   :root[data-ui="clinical"][data-ui="clinical"] .exams{grid-template-columns:repeat(2,minmax(0,1fr))}
   :root[data-ui="clinical"][data-ui="clinical"] .exams .exam-row + .exam-row{box-shadow:inset 1px 0 0 var(--line)}
+  :root[data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .decks{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+  :root[data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck{min-height:132px}
   :root[data-ui="clinical"][data-ui="clinical"] main[data-route="review"] .rv-face{padding:var(--s-8) var(--s-10)}
 }
 
@@ -476,6 +487,11 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go.done{box-shadow:none!important;color:var(--text-2)!important;padding:0}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go.done::after{content:"Done"}
 /* mastery: "73% mastered" as text */
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-ring .ring{width:auto!important;height:auto!important;display:inline}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-ring .ring > svg{display:none}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-ring .ring-in{position:static;display:inline;font-size:var(--fs-sm);color:var(--text)}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-ring .ring-in small{font-size:inherit;color:inherit}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-ring{display:flex;align-items:baseline;gap:4px;flex-direction:row}
 
 /* ---- navigation: words only ---- */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tab svg,
@@ -484,7 +500,8 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-new .ico{display:none}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-badge{background:none!important;box-shadow:none!important;color:var(--text-2)!important;font-weight:500;padding:0;min-width:0}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-dot{border-radius:1px;box-shadow:none}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-streak > .ring{display:none}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-streak > .ring,
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-snow{display:none}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-sync i{border-radius:1px}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-new{padding-left:10px!important}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-new .side-name::before{content:"+ "}
@@ -505,7 +522,7 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .switch{border-radius:4px}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .switch::after{border-radius:2px}
 /* no icons inside text buttons (Start, Options); icon-only buttons keep theirs */
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.today-hero .btn.big,#resumeBtn) .ico{display:none}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.today-hero .btn.big,#optBtn,#resumeBtn) .ico{display:none}
 /* phones: the freeze note gets its own line rather than wrapping after a stray "·" */
 @media (max-width:1023px){
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak .frz-pill{flex-basis:100%}
@@ -561,7 +578,7 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.side-set,.side-help){padding:0;border-radius:var(--r-sm)}
 
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main{padding:32px 40px 56px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{max-width:var(--page-w);margin:0 auto}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{max-width:1120px;margin:0 auto}
   /* Today's page width and its exams column: section 6 */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams{grid-template-columns:1fr!important}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams .exam-row + .exam-row{box-shadow:inset 0 1px 0 var(--line)!important}
@@ -577,6 +594,14 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .td-counts{grid-column:3;grid-row:1;margin:0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .td-go{grid-column:4;grid-row:1;justify-self:end}
   /* Decks: name/course | counts | mastered | Study | more */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .decks{grid-template-columns:1fr!important;gap:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 140px 76px 40px;grid-template-rows:auto;align-items:center;column-gap:16px;padding:12px 12px 12px 16px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck > *{align-self:center}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-ring{grid-column:2;grid-row:1;margin:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-act{grid-column:3;grid-row:1;margin:0;justify-self:end}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck > .icon-btn{grid-column:4;grid-row:1;position:static}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open{grid-column:1;grid-row:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck :is(.subdecks,.subbox){grid-column:1 / -1}
   /* Review: the card as a sheet, rules not shadows */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="review"] > .view{margin:0 auto}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-face{box-shadow:0 0 0 1px var(--line-strong)}
@@ -622,6 +647,7 @@
 :root[data-ui="clinical"] :is(.lp-rates .r1,.lp-rates .r2,.lp-rates .r3,.lp-rates .r4){box-shadow:0 0 0 1px var(--line-strong)}
 :root[data-ui="clinical"] .lp-points .ico{border-radius:var(--r-sm);background:var(--surface-2);box-shadow:none;color:var(--text-2)}
 :root[data-ui="clinical"] .fr-tag{border-radius:var(--r-xs);background:var(--surface-2);box-shadow:none;color:var(--text-2)}
+:root[data-ui="clinical"] .fr-add{border-radius:var(--r-sm)}
 :root[data-ui="clinical"] .inst-icon{box-shadow:0 0 0 1px var(--line-strong);border-radius:var(--r-md)}
 :root[data-ui="clinical"] .lp-ph-prog i{box-shadow:none}
 @media (min-width:1024px){
@@ -695,13 +721,16 @@
 
   /* --- page widths, centred --- */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{margin-inline:auto}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="play"],[data-route="import"]) > .view > :not(.screen-head):not(.back){max-width:760px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="decks"],[data-route="stats"]) > .view{max-width:1200px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view{max-width:900px}   /* one centred column, like Original (from 1600px the three-column page below takes over) */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="browse"] > .view{max-width:900px;margin-inline:auto}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="play"],[data-route="import"],[data-route="settings"]) > .view{max-width:760px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="review"] > .view{max-width:780px}
   /* first run: its own wide two-part page, centred like Original */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] body.welcome main > .view{max-width:1160px}
 
   /* --- Today --- */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view{display:block;max-width:var(--page-w)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view{display:block;max-width:880px}
   /* the goal bar runs the width of its column instead of stopping short of the Start button */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .goal{max-width:none}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .btn.big{align-self:end}
@@ -760,9 +789,12 @@
 }
 @media (min-width:1280px){
   /* --- Decks: the counts get their own column, so the row reads across instead of leaving a gap in the middle --- */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open{display:grid;grid-template-columns:minmax(0,1fr) 210px;column-gap:16px;align-items:center}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > :not(.deck-counts){grid-column:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > .deck-counts{grid-column:2;grid-row:1 / span 3;margin:0;align-self:center}
 
   /* Today: two columns when there are exams (or courses to give one): the day's work, and a 320px column on the right */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side){display:grid;grid-template-columns:minmax(0,1fr) 320px;column-gap:32px;align-items:start;max-width:var(--page-w)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side){display:grid;grid-template-columns:minmax(0,1fr) 320px;column-gap:32px;align-items:start;max-width:1200px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side) > *{grid-column:1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side) > .screen-head{grid-column:1 / -1}
   /* the column runs down beside everything: it spans all the rows after the header ("span 999" = as many as there are; empty
@@ -772,7 +804,7 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-side .exam-chip{flex:1 1 100%}
 
   /* Settings: the section menu becomes a list on the left that stays in view, the settings in a 760px column beside it */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view{display:grid;grid-template-columns:168px minmax(0,760px);column-gap:48px;max-width:var(--page-w)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view{display:grid;grid-template-columns:168px minmax(0,760px);column-gap:48px;max-width:976px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > *{grid-column:2}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .screen-head{grid-column:1 / -1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .set-nav{grid-column:1;grid-row:2 / span 999;align-self:start;position:sticky;top:24px;display:grid;gap:2px;margin:0;padding:0;border:0;background:none;overflow:visible}
@@ -909,18 +941,3 @@
 :root[data-ui="clinical"] .anki-sum{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:var(--s-2) 0;font-size:var(--fs-sm)}
 :root[data-ui="clinical"] .anki-sum .link{min-height:44px;padding:0 4px;border-radius:0;color:var(--accent-text)}
 @media (min-width:1024px) and (pointer:fine){:root[data-ui="clinical"] .anki-sum .link{min-height:36px}}
-
-/* UI draft: Decks rows in Clinical. Same slots as Original (name and numbers, one action, menu last); the table-like columns are gone */
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .decks{gap:0}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .decks.compact .deck{min-height:84px;padding:8px 6px 8px 16px}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .add-cards-btn .ico{color:var(--text-2)}
-
-/* Today draft: icon-only Options shows its icon, compact hero row on a computer, plain empty-deck row */
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak{width:auto}
-@media (min-width:1024px){
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-4) var(--s-5)}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .th-main{flex:1 1 220px;min-width:0}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak{margin:0;padding:0;border:0;flex:none}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .btn.big,
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .th-done{flex:0 0 220px;width:220px;margin:0}
-}

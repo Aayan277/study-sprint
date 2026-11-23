@@ -15,9 +15,7 @@ const open = async (ui, width, height) => {
   p.on('pageerror', e => errors.push(`${ui}/${width} pageerror ${e.message}`));
   p.on('console', m => { if (m.type() === 'error' && !/katex|jsdelivr|Failed to load resource|net::ERR/i.test(m.text())) errors.push(`${ui}/${width} console ${m.text()}`); });
   await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
-  await p.evaluate(async ui => { const db = await import('./js/db.js'); await db.setSetting('theme', { ui, skin: 'violet', mode: 'dark', oled: false });
-    // (the Study calendar card shows only from 3 days with answers)
-    const c = (await db.getAll('cards'))[0]; for (let i = 1; i <= 3; i++) await db.addLog({ cardId: c.id, timestamp: Date.now() - i * 86400000, source: 'review', correct: true, rating: 3, ms: 3000, state: 2 }); }, ui);
+  await p.evaluate(async ui => { const db = await import('./js/db.js'); await db.setSetting('theme', { ui, skin: 'violet', mode: 'dark', oled: false }); }, ui);
   await p.reload(); await p.waitForSelector('.deck');
   return p;
 };

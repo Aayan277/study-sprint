@@ -31,7 +31,8 @@ await p.evaluate(async () => {
 await go(p, '#/today', '.today-hero');
 ok(!/Mono/i.test(await css(p, '#startBtn', 'fontFamily')), 'Start is in the app font, not Geist Mono: ' + await css(p, '#startBtn', 'fontFamily'));
 ok(await css(p, '#startBtn', 'marginTop') === '0px', 'Start has no stray top margin');
-ok(await p.$('.th-sub') === null && await p.$('.today-hero > .th-main [data-count=due]') !== null, 'the hero has no visible "due · new" line (the counts stay for screen readers)');
+ok(!/Mono/i.test(await css(p, '.th-sub', 'fontFamily')), 'the "due · new" line is not mono');
+ok(!/Mono/i.test(await css(p, '.th-sub b', 'fontFamily')), 'its numbers share the text font');
 ok(await p.$eval('.exam-row .on-track, .exam-row .exam-new', e => !!e), 'exam rows have their plan line');
 const bars = await p.evaluate(() => { const bg = c => getComputedStyle(document.querySelector(c)).backgroundColor; return [bg('.tabs'), bg('.top')]; });
 const alpha = c => +(c.match(/[\d.]+/g)[3] ?? 1);
@@ -95,21 +96,19 @@ await d.goto('http://localhost:8123/#/decks'); await d.waitForSelector('.deck');
 const edges = {};
 for (const [n, h, s] of [['today', '#/today', '.tdeck'], ['decks', '#/decks', '.deck'], ['stats', '#/stats', '.card'], ['play', '#/play', '#startBtn'], ['settings', '#/settings', '#skins'], ['browse', '#/browse', '.crow-btn']]) {
   await go(d, h, s);
-  edges[n] = await d.evaluate(() => { const v = document.querySelector('main > .view'), r = v.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(v.querySelector('h1').getBoundingClientRect().left), Math.round(Math.max(...[...v.querySelectorAll(':scope > :not(.screen-head):not(.back)')].map(e => e.getBoundingClientRect().width)))]; });
+  edges[n] = await d.evaluate(() => { const v = document.querySelector('main > .view'), r = v.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(v.querySelector('h1').getBoundingClientRect().left)]; });
 }
 // (UI audit M9, intended change: the wide screens share one left edge and 1120px; the narrow columns (Play, Settings, Browse) are centred in the same space)
 const wide = ['today', 'decks', 'stats'].map(n => edges[n]);
-ok(wide.every(e => e[0] === edges.today[0] && e[1] === 1040 && e[2] === edges.today[0]), 'Today, Decks and Stats share one left edge and are 1040px wide (--page-w): ' + JSON.stringify(wide));
+ok(wide.every(e => e[0] === edges.today[0] && e[1] === 1120 && e[2] === edges.today[0]), 'Today, Decks and Stats share one left edge and are 1120px wide: ' + JSON.stringify(wide));
 const mainBox = await d.evaluate(() => { const m = document.querySelector('main').getBoundingClientRect(); return [Math.round(m.left), Math.round(m.right)]; });
 // (round 4, intended change: the narrow columns start at the same left edge as Today and Decks instead of floating in the middle)
-ok(['play', 'settings', 'browse'].every(n => Math.abs(edges[n][0] - edges.today[0]) <= 2), 'Play, Settings and Browse start on the same left edge as Today: ' + JSON.stringify(['play', 'settings', 'browse'].map(n => edges[n])));
-ok(['play', 'settings'].every(n => edges[n][3] <= 760.5), 'Play and Settings content is at most 760px wide: ' + JSON.stringify(['play', 'settings'].map(n => edges[n][3])));
-ok(edges.browse[1] <= 1040, 'Browse is at most the page width (--page-w): ' + edges.browse[1]);
+ok(['play', 'settings', 'browse'].every(n => Math.abs(edges[n][0] - edges.today[0]) <= 2 && edges[n][1] <= 900), 'Play, Settings and Browse are narrow columns on the same left edge as Today: ' + JSON.stringify(['play', 'settings', 'browse'].map(n => edges[n])));
 await go(d, '#/play', '#startBtn');
 ok(await d.$eval('#startBtn', e => e.getBoundingClientRect().width <= 760), 'Play keeps a 760px reading column inside it');
 await go(d, '#/today', '.today-hero');
 ok(await css(d, '.th-big', 'fontSize') === '36px', "Today's hero heading is larger on desktop");
-ok(await d.$eval('.today-hero .ring', e => e.getBoundingClientRect().width) <= 84, "Today's ring is a small detail on desktop (the Start button is the hero)");
+ok(await d.$eval('.today-hero .ring', e => e.getBoundingClientRect().width) > 100, "Today's ring is larger on desktop");
 await d.evaluate(() => { document.documentElement.setAttribute('data-theme', 'dark'); });
 const hasHScroll = await d.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 ok(!hasHScroll, 'no sideways scroll on desktop Today');

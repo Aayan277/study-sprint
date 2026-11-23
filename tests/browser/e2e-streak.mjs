@@ -178,8 +178,12 @@ await d.goto(URL + '#/today'); await d.waitForSelector('.today-hero');
 await seed(d, [2, 3, 4, 5, 6]);
 await d.reload(); await d.waitForSelector('#startBtn'); await d.waitForSelector('.side-deck');
 // (round 4: Today shows the streak itself, so the sidebar copy is hidden there; check it on Decks)
-await go(d, '#/decks', '.deck');
-ok(await d.locator('#sideStreak .side-snow').count() === 0 && !/streak/.test(await d.textContent('#sideStreak')), 'the sidebar footer no longer shows a streak or snowflake');
+await go(d, '#/decks', '.deck'); await d.waitForSelector('#sideStreak .side-snow');
+const aria = await d.getAttribute('#sideStreak', 'aria-label');
+ok(/^5-day streak, freeze used \w+\./.test(aria) && aria.includes('freeze'), 'sidebar aria-label mentions the freeze: ' + aria);
+ok((await d.getAttribute('#sideStreak', 'data-tip')).includes('freeze used'), 'and so does its tooltip: ' + await d.getAttribute('#sideStreak', 'data-tip'));
+ok(await d.locator('#sideStreak .side-snow').count() === 1 && await d.$eval('#sideStreak .side-snow', e => e.getBoundingClientRect().width) <= 13, 'a 12px snowflake shows while a freeze was used in the last 7 days');
+ok((await d.textContent('#sideStreak')).includes('5-day streak'), 'the sidebar text is still "5-day streak"');
 await go(d, '#/today', '#startBtn');
 ok(!(await d.isVisible('#sideStreak')), 'on Today the sidebar streak is hidden: the hero chip is the one streak');
 await noHScroll(d, 'Today at 1440');
@@ -198,6 +202,7 @@ await theme(d, 'dark');
 await d.screenshot({ path: SP + '/streak-stats-1440-dark.png' });
 // the collapsed rail: no text, the tooltip carries the freeze
 await d.click('#sideCollapse'); await d.waitForTimeout(250);
+ok((await d.getAttribute('#sideStreak', 'data-tip')).includes('freeze used'), 'in the icon rail the tooltip still says the freeze was used');
 await d.click('#sideCollapse');
 
 // ============================ exam day chips, and a day off with an exam ============================
@@ -229,8 +234,8 @@ ok(/^5\s*day streak/.test(moved) && !moved.includes('Study today'), 'two days la
 ok(await f.locator('.streak .frz-pill').count() === 1, 'and Wednesday was covered by the freeze: ' + await norm(f, '.frz-pill'));
 // without the days off the same gap breaks it
 await f.evaluate(async () => { await (await import('./js/db.js')).setSetting('restDays', {}); });
-await f.reload(); await f.waitForSelector('.today-hero');
-ok(await f.locator('.today-hero .streak').count() === 0, 'without the days off the streak is 0, so Today hides it');
+await f.reload(); await f.waitForSelector('#streakBtn');
+ok(/^0\s*day streak/.test(await norm(f, '.streak')), 'without the days off the streak is 0: ' + await norm(f, '.streak'));
 // a day off today
 await f.ctx.clock.setFixedTime(new Date(2026, 9, 15, 12));    // Thu 15: yesterday (Wed 14) missed and covered, today a day off
 await f.evaluate(async () => { await (await import('./js/db.js')).setSetting('restDays', { '2026-10-15': { on: true, at: 1 } }); });
@@ -243,10 +248,12 @@ await f.screenshot({ path: SP + '/streak-restday-375-dark.png' });
 const g = await open(375, 740, { touch: true, at: new Date(2026, 9, 16, 12) });     // Fri 16 Oct
 await g.goto(URL + '#/today'); await g.waitForSelector('.today-hero');
 await seed(g, [2, 4, 7]);                                                           // Wed 14, Mon 12 and Fri 9; Thu 15 and Tue 13 missed
-await g.reload(); await g.waitForSelector('.today-hero');
+await g.reload(); await g.waitForSelector('#streakBtn');
+const second = await norm(g, '.streak');
 // v4.2.1 (owner decision): the week's freeze stays on the EARLIEST missed day (Tue 13), so the newer miss (Thu 15) ends
 // the streak at once. Before, the freeze moved to Thu and the streak was 1 ("Freeze used yesterday").
-ok(await g.locator('.today-hero .streak').count() === 0, 'a second miss in the same week ends the streak (no streak line), the freeze stays on the first miss');
+ok(/^0\s*day streak/.test(second) && !second.includes('Study today') && !second.includes('Freeze used') && !second.includes('freeze ready'),
+  'a second miss in the same week ends the streak, the freeze stays on the first miss: ' + second);
 
 // ============================ backup and sync keep the days off ============================
 const h = await open(375, 740, { touch: true });

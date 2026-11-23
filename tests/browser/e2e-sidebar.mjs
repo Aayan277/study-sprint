@@ -133,13 +133,13 @@ await p.click('#sideDecksH');
 ok(await p.isVisible('.side-deck[data-key=bio]') && (await p.getAttribute('#sideDecksH', 'aria-expanded')) === 'true', 'the heading opens it again');
 
 // the footer: ring and streak (round 4: hidden on Today, where the hero chip is the streak, so look at it on Decks)
-ok(!(await p.isVisible('#sideStreak')), 'on Today the sidebar ring is hidden (the hero has the ring)');
+ok(!(await p.isVisible('#sideStreak')), 'on Today the sidebar streak is hidden (one streak on screen)');
 await go(p, '#/decks', '.deck');
 const streakText = await p.textContent('#sideStreak');
-ok(!/streak/.test(streakText) && !/streak/.test(await p.getAttribute('#sideStreak', 'aria-label')), 'footer: no streak any more (it lives on Today and Stats)');
+ok(/3-day streak/.test(streakText) && (await p.getAttribute('#sideStreak', 'aria-label')).startsWith('3-day streak'), 'footer: "3-day streak" from the log');
 ok((await box(p, '#sideStreak .ring')).w === 30, 'the goal ring is 30px');
 ok(await p.$eval('#sideStreak .ring-fg', e => !!e).catch(() => false), 'the ring shows today\'s answers over the daily goal');
-ok(/1 of \d+ cards today/.test(await p.getAttribute('#sideStreak', 'aria-label')) && / of \d+ today/.test(streakText), 'the answers count is the footer text and in its label: ' + streakText.replace(/\s+/g, ' ').trim());
+ok(/1 of \d+ cards today/.test(await p.getAttribute('#sideStreak', 'aria-label')) && !/ of \d+ today/.test(streakText), 'the answers count is in the label for screen readers, not repeated as text: ' + streakText.replace(/\s+/g, ' ').trim());
 await go(p, '#/today', '#startBtn');
 
 // sync status

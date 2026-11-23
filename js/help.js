@@ -37,8 +37,8 @@ export const SECTIONS = [
       <p>Nothing is lost: cards you didn’t review wait for you. One missed day a week (the week runs Monday to Sunday) is covered by a streak freeze, so a single slip doesn’t end your streak (two missed days in a row still do). Back after a longer break? Today offers to spread the overdue cards over 2 or 3 days (<b>Spread them out</b>).</p>` },
     { id: 'catch-up', q: 'What does Pause new cards until caught up do?', a: `
       <p>While the catch-up plan runs, no new cards start, so the overdue ones come first. Decks with an exam still get their new cards. Most overdue cards come first, on top of your usual reviews, and cards for an exam are never held back.</p>` },
-    { id: 'custom-study', q: 'What can I do in Today → Today options and Custom study?', a: `
-      <p>The <b>Today options</b> button (sliders icon) on Today picks which decks you study (each chip shows what’s due · new), how you answer (flip or type), and opens <b>Custom study…</b>. Custom study is for extra work beyond today’s cards:</p>
+    { id: 'custom-study', q: 'What can I do in Today → Options and Custom study?', a: `
+      <p><b>Options</b> on Today picks which decks you study (each chip shows what’s due · new), how you answer (flip or type), and opens <b>Custom study…</b>. Custom study is for extra work beyond today’s cards:</p>
       <ul>
         <li><b>More new cards today</b>: raise today’s new-card limit with the + and − buttons, then <b>Add</b>.</li>
         <li><b>Postpone reviews</b>: push chosen reviews to later.</li>
@@ -87,7 +87,7 @@ export const SECTIONS = [
       <p>The line above the preview says what comes along; <b>Change</b> shows the switches. Once the installed app has been online, it saves what it needs to open Anki files, so importing works offline too.</p>
       <p>Sounds stay on this device, sync like pictures and are kept in backups. A big deck (over 200 MB of pictures and sounds, or more than 50,000 reviews of history) is slow on a phone, fills your account space and makes the first sync on a new device slower. The import warns you; turn off <b>Bring sounds</b> or <b>Bring over my Anki progress</b> to leave them out.</p>` },
     { id: 'typing', q: 'Can I type my answers instead of flipping?', a: `
-      <p>Yes, and the app shows which letters were wrong. For one session: Today → <b>Today options</b> → Answer by → <b>Typing the answer</b> (answers of 40 characters or less). To keep it: open a card and set <b>Answer by</b> to Typing the answer, select several cards in Browse and choose <b>Answer by…</b>, or turn on <b>Type the answers</b> in a deck’s Edit deck sheet (it applies to that deck and its subdecks, and <b>Answer by</b> in a card’s editor sets one card differently). Anki cards with a “type in the answer” box come in as typing cards. Cloze, image-occlusion and elements cards always just flip: they have no typing box.</p>` },
+      <p>Yes, and the app shows which letters were wrong. For one session: Today → <b>Options</b> → Answer by → <b>Typing the answer</b> (answers of 40 characters or less). To keep it: open a card and set <b>Answer by</b> to Typing the answer, select several cards in Browse and choose <b>Answer by…</b>, or turn on <b>Type the answers</b> in a deck’s Edit deck sheet (it applies to that deck and its subdecks, and <b>Answer by</b> in a card’s editor sets one card differently). Anki cards with a “type in the answer” box come in as typing cards. Cloze, image-occlusion and elements cards always just flip: they have no typing box.</p>` },
     { id: 'cloze', q: 'How do I write cloze (fill in the blank) cards?', a: `
       <p>In the card editor, select the words to hide and tap <b>New blank</b>. Each blank becomes its own card. <b>Same blank as the last one</b> hides another word on that same card. To show a hint instead of […], type two colons and the hint inside the blank, after the answer. The preview under the box says how many cards you will get.</p>` },
     { id: 'maths', q: 'How do I write maths on a card?', a: `
@@ -104,8 +104,8 @@ export const SECTIONS = [
       <p>In <b>Edit deck</b>, <b>Read cards aloud automatically</b> reads the front when it appears and the back when you flip in Review. The speaker button, or R, reads it any time. <b>Play sounds automatically</b> plays the front’s sounds when a card appears and the back’s when you flip.</p>` },
     { id: 'export', q: 'Which export should I pick, spreadsheet or Anki?', a: `
       <p>A spreadsheet (.csv) opens in Excel, Google Sheets or Numbers, and can be imported into Quizlet or back into Study Sprint. An Anki deck (.apkg) is for Anki, AnkiDroid or AnkiMobile, through File → Import.</p>` },
-    { id: 'deck-ring', q: 'What does “N% mastered” on a deck mean?', a: `
-      <p>The “N% mastered” on a deck counts the cards that are young or mature. ${helpLink('stats-terms', 'What those mean')}.</p>` },
+    { id: 'deck-ring', q: 'What does the percentage ring on a deck mean?', a: `
+      <p>The “N% learned” ring counts the cards that are young or mature. ${helpLink('stats-terms', 'What those mean')}.</p>` },
     { id: 'glossary', q: 'What is the Glossary?', a: `
       <p>Define a term once in Settings → Study → <b>Glossary</b> and it’s underlined on every Review card, with its definition a tap away. Turn the underlines off with <b>Glossary underlines</b> in Settings → Appearance.</p>` },
     { id: 'share', q: 'Can I share a deck with a friend?', a: `
@@ -179,7 +179,7 @@ export const SECTIONS = [
         <li><b>Answer buttons</b> shows how you answered in the last 30 days. Mostly Good is normal. Lots of Again on reviews means cards are coming back too late: try a higher Target retention in Settings.</li>
       </ul>` },
     { id: 'stats-calendar', q: 'How does the Study calendar work?', a: `
-      <p>Each square in the <b>Study calendar</b> is a day; darker means more answers. Tap a day to read its numbers, or use <b>Pick a day</b> to do it without a mouse. The calendar appears once you’ve studied on 3 days. A diagonal hatch is a day covered by a streak freeze, and a day off you planned is marked too.</p>` },
+      <p>Each square in the <b>Study calendar</b> is a day; darker means more answers. Tap a day to read its numbers, or use <b>Pick a day</b> to do it without a mouse. A diagonal hatch is a day covered by a streak freeze, and a day off you planned is marked too.</p>` },
     { id: 'streak-freeze', q: 'What is a streak freeze?', a: `
       <p>One streak freeze a week covers a missed day. It keeps your streak but doesn’t add to the count. Two missed days in a row still break it. To rest on purpose, tap <b>Plan a day off</b>: a planned day off never breaks your streak and doesn’t add to it. You can plan up to 14 days, starting tomorrow and up to 60 days ahead. Studying any deck keeps the streak going (on a course’s Stats, the streak still counts all decks). A snowflake next to the streak means a freeze was used; a freeze that is only ready shows nothing.</p>` },
     { id: 'readiness', q: 'What does Exam readiness mean?', a: `

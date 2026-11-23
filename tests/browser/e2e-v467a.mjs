@@ -11,12 +11,11 @@ async function open(w, h, ui, mode, touch = false) {
   await ctx.addInitScript(([u, m]) => { try { localStorage.setItem('study-sprint-theme', JSON.stringify({ ui: u, skin: 'ocean', mode: m })); localStorage.setItem('study-sprint-rail', '0'); } catch { /* fine */ } }, [ui, mode]);
   const p = await ctx.newPage(); p.on('pageerror', e => errors.push(e.message));
   await p.goto(URL); await p.waitForSelector('.today-hero');
-  await p.evaluate(async ([u, m]) => {
+  await p.evaluate(async () => {
     const db = await import('./js/db.js'), now = Date.now();
-    await db.setSetting('theme', { ui: u, skin: 'ocean', mode: m, oled: false });   // the saved setting wins over localStorage, so Clinical needs it here
     await db.addDeckWithCards({ id: 'wpa', name: 'Wpa deck', color: '#3E63DD', created: now + 1 },
       Array.from({ length: 6 }, (_, i) => ({ id: 'wpa' + i, deckId: 'wpa', front: 'Q' + i, back: 'A' + i, tags: [], created: i })));
-  }, [ui, mode]);
+  });
   await p.reload(); await p.waitForSelector('.today-hero');
   return { p, ctx };
 }
@@ -47,13 +46,12 @@ for (const ui of ['original', 'clinical']) for (const mode of ['light', 'dark'])
   await ctx.close();
 }
 
-// Start fills the rest of the top card's row after the ring and streak (Original), full width on a phone, a 220px button at the right of the row in Clinical
+// Start sits at the right edge of the top card (Original), full width on a phone, still in its column in Clinical
 for (const [w, h] of [[1440, 900], [1024, 768]]) for (const mode of ['light', 'dark']) {
   const { p, ctx } = await open(w, h, 'original', mode);
   const r = await p.evaluate(() => { const hero = document.querySelector('.today-hero'), cs = getComputedStyle(hero), hb = hero.getBoundingClientRect(), b = document.getElementById('startBtn').getBoundingClientRect();
-    const ring = hero.querySelector('.ring').getBoundingClientRect();
-    return { right: hb.right - parseFloat(cs.paddingRight) - b.right, afterRing: b.left - ring.right, w: b.width }; });
-  ok(Math.abs(r.right) <= 2 && r.afterRing > 0 && r.w >= 220, `original ${mode} ${w}: Start fills the row after the ring, up to the card's right padding (${r.right.toFixed(1)}px in, ${r.afterRing.toFixed(0)}px after the ring, ${r.w.toFixed(0)}px wide)`);
+    return { right: hb.right - parseFloat(cs.paddingRight) - b.right, left: b.left - (hb.left + hb.width / 2) }; });
+  ok(Math.abs(r.right) <= 2 && r.left > 0, `original ${mode} ${w}: Start is at the right edge of the top card (${r.right.toFixed(1)}px in, ${r.left.toFixed(0)}px past the middle)`);
   await ctx.close();
 }
 {
@@ -64,8 +62,8 @@ for (const [w, h] of [[1440, 900], [1024, 768]]) for (const mode of ['light', 'd
 }
 {
   const { p, ctx } = await open(1440, 900, 'clinical', 'light');
-  const r = await p.evaluate(() => { const hero = document.querySelector('.today-hero'), cs = getComputedStyle(hero), hb = hero.getBoundingClientRect(), b = document.getElementById('startBtn').getBoundingClientRect(); return { right: hb.right - parseFloat(cs.paddingRight) - b.right, w: b.width, top: b.top - hb.top, h: hb.height }; });
-  ok(Math.abs(r.right) <= 2 && Math.abs(r.w - 220) <= 1 && r.top < r.h / 2, `clinical 1440: Start is a 220px button at the right end of the one-row card (${r.right.toFixed(1)}px in, ${r.w.toFixed(0)}px wide)`);
+  const r = await p.evaluate(() => { const hb = document.querySelector('.today-hero').getBoundingClientRect(), b = document.getElementById('startBtn').getBoundingClientRect(); return b.left > hb.left + hb.width / 2; });
+  ok(r, 'clinical 1440: Start is still in the right column');
   await ctx.close();
 }
 

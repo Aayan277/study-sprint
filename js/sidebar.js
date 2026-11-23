@@ -3,14 +3,15 @@
 //   Today badge    countFor(data, chosen decks or all).total: the same number as Today's Start button. Hidden at 0.
 //   Decks dot      the nearest exam (examInfo) within 7 days: amber, red inside 3 days (the badgeClass rule)
 //   Decks list     top-level decks in tree order: colour stripe, due count, and an exam pill within 14 days
-//   Footer         today ring, sync status (the wording of Settings), Settings, theme, collapse
+//   Footer         today ring + streak (as on Today), sync status (the wording of Settings), Settings, theme, collapse
 // The numbers come from the same loadAll() Today uses, so nothing here reads the whole review log. Today hands over the
 // data it just loaded (drawSidebar(loaded)), so opening Today costs nothing extra.
 // drawSidebar() runs on start, after Review/Play rounds, after deck edits and when a sync brought changes in.
 // Changing screens only moves aria-current (markCurrent), called from route() in app.js.
 // Collapsed, the sidebar is a 72px icon rail; the choice is kept per device and applied from index.html's head script.
 
-import { loadAll, countFor, todayRing } from './study-data.js';
+import { loadAll, countFor, loadStreak, todayRing } from './study-data.js';
+import { streakText } from './stats-calc.js';
 import { examInfo, badgeClass, countdown } from './exam.js';
 import { esc, icon, ring, plural, foldOpen, saveFold, toast } from './ui.js';
 import { formatInterval } from './queue.js';
@@ -71,6 +72,7 @@ export async function drawSidebar(loaded = null) {
 
 async function paint(loaded) {
   const data = loaded?.data || await loadAll({ history: true });
+  const streak = loaded?.streak || await loadStreak(data.history, data);
   if (!shouldDraw()) return;
   const allIds = data.decks.map(d => d.id);
   const chosen = loaded?.chosen || data.settings.reviewDecks.filter(id => allIds.includes(id));
@@ -117,13 +119,17 @@ async function paint(loaded) {
   markCurrent();
   fadeList();
 
-  // Footer: today ring only (the streak lives on Today and Stats)
+  // Footer: today ring and streak
   const st = $('sideStreak');
-  st.className = 'side-streak';
-  st.setAttribute('aria-label', tr.state === 'nothing' ? 'Nothing due today' : `${tr.done} of ${tr.total} cards today`);
-  st.dataset.tip = ringText;
-  st.innerHTML = `${ring(tr.frac, 30, 3)}
-    <span class="side-st"><b>${ringText}</b></span>`;
+  st.className = 'side-streak' + (streak.studiedToday ? ' kept' : '');
+  // A streak freeze: "freeze ready" (none used this week) or "freeze used Tue"; a snowflake while one was used in the last 7 days.
+  const { sub } = streakText(streak);
+  const usedRecently = streak.week.some(d => d.frozen);
+  const note = !streak.days ? '' : streak.freeze.usedOn ? ', ' + sub[0].toLowerCase() + sub.slice(1) : ', freeze ready';
+  st.setAttribute('aria-label', `${streak.days}-day streak${note}. ${tr.state === 'nothing' ? 'Nothing due today' : `${tr.done} of ${tr.total} cards today`}`);
+  st.dataset.tip = `${streak.days}-day streak${note ? ' · ' + note.slice(2) : ''} · ${ringText}`;
+  st.innerHTML = `${ring(tr.frac, 30, 3, icon('flame'))}
+    <span class="side-st"><b>${streak.days}-day streak${usedRecently ? icon('snow', 'side-snow') : ''}</b>${tr.state === 'nothing' ? `<span>${ringText}</span>` : ''}</span>`;
   await drawSync();
 }
 

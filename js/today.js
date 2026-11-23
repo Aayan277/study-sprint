@@ -94,7 +94,7 @@ export async function renderToday(el) {
     el.innerHTML = `
       <div class="screen-head">
         <div><h1>Today</h1></div>
-        ${data.decks.length ? `<div class="head-actions"><button class="icon-btn" type="button" id="optBtn" aria-label="Today options" title="Today options" aria-haspopup="dialog">${icon('sliders')}</button></div>` : ''}
+        ${data.decks.length ? `<div class="head-actions"><button class="btn ghost small" type="button" id="optBtn">${icon('sliders')} Options</button></div>` : ''}
       </div>
       ${!data.cards.length && !data.hiddenCount ? emptyStartHTML({ courseId: top.filter(d => d.id !== 'sample').length === 1 ? top.filter(d => d.id !== 'sample')[0].id : '' })
       : `
@@ -105,12 +105,12 @@ export async function renderToday(el) {
         <div class="th-main">
           ${ring(tr.frac, 84, 8, tr.state !== 'todo' ? icon('check', 'ring-check') : `<b class="mono">${tr.done}</b><small class="mono">/${tr.total}</small>`)}
           <div class="th-text">
-            ${tr.state === 'nothing' ? '' : `<span class="sr-only"><b data-count="due">${c.due.toLocaleString('en')}</b> due · <b data-count="new">${c.fresh.toLocaleString('en')}</b> new</span>`}
             <b class="th-big${tr.state === 'todo' ? ' sr-only' : ''}">${tr.state === 'todo' ? `${c.total.toLocaleString('en')} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
+            ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due.toLocaleString('en')}</b> due · <b data-count="new">${c.fresh.toLocaleString('en')}</b> new</span>`}
             ${tr.state === 'nothing' ? '' : `<span class="goal"><span class="goal-t"><b>${tr.done}</b> done today</span><span class="goal-bar" aria-hidden="true"><i style="width:${Math.round(tr.frac * 100)}%"></i></span></span>`}
           </div>
         </div>
-        ${streak.days >= 1 ? streakHTML(streak, { button: true }) : ''}
+        ${streakHTML(streak, { button: true })}
         ${tr.state === 'todo'
           ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
           : `<div class="th-done">
@@ -259,7 +259,7 @@ export async function renderToday(el) {
         <span class="td-name">${esc(deck.name)}</span>
         <span class="td-counts"><span>No cards yet</span>${info ? ` <span class="${badgeClass(info)}">${esc(countdown(info))}</span>` : ''}</span>
       </span>
-      </a>`;
+      <span class="td-go"><span class="fr-add">${icon('plus')} Add cards</span></span></a>`;
     const inner = `
       <span class="td-main">
         ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
