@@ -160,8 +160,8 @@ ok(await run(async () => (await import('./js/study-data.js')).takeLaunch()) === 
 // ---- Deck tile numbers are today's numbers ----
 await run(async () => { await (await import('./js/db.js')).setSetting('newPerDay', 3); });
 await page.reload(); await page.waitForSelector('.deck');
-const tile = (await page.textContent('article.deck:has-text("Intro to Psychology") .deck-counts')).replace(/\s+/g, ' ');
-const study = await page.getAttribute('article.deck:has-text("Intro to Psychology") [data-study]', 'aria-label');      // the small round play button says it in its label
+const tile = (await page.textContent('article.deck:has-text("Sample deck") .deck-counts')).replace(/\s+/g, ' ');
+const study = await page.getAttribute('article.deck:has-text("Sample deck") [data-study]', 'aria-label');      // the small round play button says it in its label
 const [, tDue, tNew] = tile.match(/(\d+) due (\d+) new/) || [];
 ok(+tNew <= 3 && +tDue + +tNew === +study.match(/: (\d+) cards?/)[1] && +tNew > 0, 'tile and Study button agree, with the limit of 3 new a day applied: ' + tile.trim() + ' | ' + study.trim());
 

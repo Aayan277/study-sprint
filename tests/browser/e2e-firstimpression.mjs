@@ -31,10 +31,9 @@ const finishSession = async p => {
 
 // ---------- D2: the sample cards match the promise ----------
 let p = await open(real);
-await p.goto(URL); await p.waitForSelector('#wlNext'); await p.click('#wlNext');
-await p.fill('#wlName', 'Cell Biology'); await p.click('#wlForm button[type=submit]'); await p.waitForSelector('#wlSample');
+await p.goto(URL); await p.waitForSelector('#wlNext'); await p.click('#wlNext'); await p.waitForSelector('#wlSample');
 const firstOpt = await p.$eval('.wl-opts > :first-child', e => ({ id: e.id, t: e.textContent }));
-ok(firstOpt.id === 'wlSample' && /sample cards/i.test(firstOpt.t) && !/Fastest/.test(firstOpt.t), 'step 3 puts "Try it with sample cards" first, with no badge');
+ok(firstOpt.id === 'wlSample' && /sample cards/i.test(firstOpt.t) && !/Fastest/.test(firstOpt.t), 'step 2 puts "Try it with sample cards" first, with no badge');
 ok(await p.locator('#wlSample .wl-opt-d').count() === 0, 'the sample option has no description line');
 await p.click('#wlSample'); await p.waitForSelector('#showBtn');
 for (const r of [1, 3, 4]) { await p.click('#showBtn'); await p.click('.rate.r' + r); await p.waitForTimeout(80); }
@@ -42,14 +41,14 @@ await p.waitForSelector('.fr-when');
 const when = await p.$$eval('.fr-when li', l => l.map(x => x.textContent));
 ok(when.length === 3 && when.every(t => /in \d+ (minutes?|hours?|days?)/.test(t)), 'the done screen shows when each card comes back: ' + JSON.stringify(when));
 ok(/in 1 minute/.test(when[0]) && /in 10 minutes/.test(when[1]), 'Again comes back in 1 minute, Good in 10 minutes');
-ok((await p.textContent('.fr-next')).includes('Add your Cell Biology cards'), 'it offers "Add your Cell Biology cards"');
-const href = await p.getAttribute('#wlAdd', 'href');
-const deckId = await p.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name === 'Cell Biology').id);
-ok(href === '#/import/' + deckId, 'the button opens Import with Cell Biology chosen');
+ok((await p.textContent('.fr-next')).includes('Add your own cards') && (await p.getAttribute('#wlAdd', 'href')) === '#/import', 'it offers "Add your own cards", which opens Import with no deck chosen');
 await p.click('#wlGo'); await p.waitForSelector('.today-hero');
+// an empty deck (made here, since the start no longer makes one)
+const deckId = await p.evaluate(async () => { const db = await import('./js/db.js'); const id = db.newId(); await db.saveDeck({ id, name: 'Cell Biology', course: '', color: '#46A758', parentId: '', created: Date.now() }); return id; });
+await p.reload(); await p.waitForSelector('.today-hero');
 const row = await p.evaluate(() => { const r = [...document.querySelectorAll('.tdeck')].find(x => x.textContent.includes('Cell Biology')); return { cls: r.className, t: r.textContent, href: r.getAttribute('href'), tick: !!r.querySelector('.td-go .ico[viewBox] path[d="M5 12.5l4.5 4.5L19 7.5"]') }; });
-ok(/fr-emptydeck/.test(row.cls) && !/done/.test(row.cls) && /Add cards/.test(row.t) && /No cards yet/.test(row.t) && !row.tick, 'an empty course on Today shows "+ Add cards", not a green done tick');
-ok(row.href === '#/import/' + deckId, 'and it links to Import for that course');
+ok(/fr-emptydeck/.test(row.cls) && !/done/.test(row.cls) && /Add cards/.test(row.t) && /No cards yet/.test(row.t) && !row.tick, 'an empty deck on Today shows "+ Add cards", not a green done tick');
+ok(row.href === '#/import/' + deckId, 'and it links to Import for that deck');
 await p.context().close();
 
 // Skip lands on a helpful empty Today
@@ -64,7 +63,7 @@ await p.click('#trySample'); await p.waitForSelector('.guide #showBtn');
 ok(p.url().endsWith('#/welcome/review/sample') && (await p.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).length)) === 12, 'Try sample cards adds the 12 sample cards and starts the guided review');
 for (let i = 0; i < 3; i++) { await p.click('#showBtn'); await p.click('.rate.r3'); await p.waitForTimeout(80); }
 await p.waitForSelector('#wlGo');
-ok((await p.textContent('.fr-next')).includes('Add your own cards') && (await p.getAttribute('#wlAdd', 'href')) === '#/import', 'with no course, the done screen offers "Add your own cards"');
+ok((await p.textContent('.fr-next')).includes('Add your own cards') && (await p.getAttribute('#wlAdd', 'href')) === '#/import', 'the done screen offers "Add your own cards"');
 await p.click('#wlGo'); await p.waitForSelector('.today-hero');
 ok(!(await p.content()).includes('fr-emptydeck'), 'the sample deck has cards, so no "Add cards" row');
 await p.context().close();
