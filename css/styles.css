@@ -3441,3 +3441,9 @@ main h2[tabindex="-1"]{outline:none}
 .anki-sum{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:var(--s-2) 0;font-size:var(--fs-sm)}
 .anki-sum .link{min-height:44px;padding:0 4px;color:var(--accent-text);font-weight:500}
 @media (min-width:1024px) and (pointer:fine){.anki-sum .link{min-height:36px}}
+
+/* Import preview: on a computer each card's front and back sit side by side */
+@media (min-width:1024px){
+  .pcells{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:var(--s-2)}
+  .pcells > :not(textarea){grid-column:1 / -1}
+}
