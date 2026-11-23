@@ -455,3 +455,31 @@ export function clearFieldError(field, errEl) {
   if (d) field.setAttribute('aria-describedby', d); else field.removeAttribute('aria-describedby');
   if (field._errClear) { field.removeEventListener('input', field._errClear); field._errClear = null; }
 }
+
+// ---------- instant tooltips ----------
+// Any button can carry data-hint="Name" (and data-hint-key="D" for its single-key shortcut). A mouse resting on it, or the keyboard focusing it,
+// shows the name at once (the browser's own title tooltip waits a second), with the key as a small cap. The name stays in the button's aria-label.
+let hintEl = null;
+const hideHint = () => { if (hintEl) { hintEl.hidden = true; hintEl.replaceChildren(); } };      // (emptied too, so no key cap is left in the page while no tip shows)
+function showHint(el) {
+  const text = el.dataset.hint;
+  if (!text) return;
+  if (!hintEl) { hintEl = Object.assign(document.createElement('div'), { className: 'ui-tip', hidden: true }); hintEl.setAttribute('aria-hidden', 'true'); }
+  if (!hintEl.isConnected) document.body.append(hintEl);
+  hintEl.replaceChildren(text);
+  if (el.dataset.hintKey) hintEl.append(Object.assign(document.createElement('kbd'), { textContent: el.dataset.hintKey }));
+  hintEl.hidden = false;
+  const r = el.getBoundingClientRect(), w = hintEl.offsetWidth;
+  hintEl.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+  hintEl.style.top = `${r.bottom + 8}px`;
+}
+export function initHints() {
+  const hint = e => e.target.closest?.('[data-hint]');
+  document.addEventListener('pointerover', e => { if (e.pointerType === 'touch') return; const el = hint(e); if (el) showHint(el); });
+  document.addEventListener('pointerout', e => { if (hint(e)) hideHint(); });
+  document.addEventListener('focusin', e => { const el = hint(e); if (el?.matches(':focus-visible')) showHint(el); });
+  document.addEventListener('focusout', hideHint);
+  document.addEventListener('pointerdown', hideHint);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideHint(); });
+  addEventListener('scroll', hideHint, { passive: true, capture: true });
+}

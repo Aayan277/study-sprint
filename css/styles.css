@@ -3447,3 +3447,8 @@ main h2[tabindex="-1"]{outline:none}
   .pcells{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:var(--s-2)}
   .pcells > :not(textarea){grid-column:1 / -1}
 }
+
+/* Instant tooltip (js/ui.js initHints): a name, and the single key as a small cap */
+.ui-tip{position:fixed;z-index:30;display:flex;align-items:center;gap:8px;pointer-events:none;padding:6px 10px;border-radius:var(--r-sm);background:var(--surface-3);color:var(--text);box-shadow:var(--e-2);font:500 var(--fs-xs)/1.35 var(--f-ui);white-space:nowrap}
+.ui-tip[hidden]{display:none}
+.ui-tip kbd{font:600 var(--fs-2xs)/1.5 var(--f-num);padding:0 5px;border-radius:4px;border:1px solid var(--line-strong);color:var(--text-2)}

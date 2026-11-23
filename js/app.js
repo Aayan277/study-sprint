@@ -10,7 +10,7 @@ import { addSampleDeck } from './sample.js';
 import { initInstall, isInstalled } from './install.js';
 import { initPanelResize } from './panel-resize.js';
 import { takeDraft } from './import-draft.js';
-import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty } from './ui.js';
+import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty, initHints } from './ui.js';
 import { account } from './sync-state.js';
 import { initWhatsNew } from './whats-new.js';
 import { takeLaunch } from './study-data.js';
@@ -409,6 +409,7 @@ async function start() {
   initTapGuard();
   wireGear();
   initSidebar({ version: APP_VERSION });
+  initHints();
   initWhatsNew({ version: APP_VERSION });
   watchMath();       // draws the maths on cards (js/math.js, loaded when the first formula appears) wherever it appears
   // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).
