@@ -227,30 +227,28 @@ await p.close();
 // ---------- 8. Guided review on a fresh install ----------
 p = await open(real);
 await p.goto(APP); await p.waitForSelector('#wlNext');
-await p.click('#wlNext'); await p.waitForSelector('#wlName');
-await p.fill('#wlName', 'Cell Biology'); await p.keyboard.press('Enter');
+await p.click('#wlNext');
 await p.waitForSelector('#wlSample'); await p.click('#wlSample');
-await p.waitForSelector('.guide #coach');
-await p.evaluate(() => { window.__coach = document.getElementById('coach'); });
-ok(await p.evaluate(() => document.getElementById('coach').getAttribute('role') === 'status'), 'Guided review: #coach is a status region');
+await p.waitForSelector('.guide #gStage');
+ok(await p.evaluate(() => !document.getElementById('coach') && !document.querySelector('.flash-hint')), 'Guided review: no tip box and no flip hint');
+ok(await p.evaluate(() => document.getElementById('gCount').getAttribute('role') === 'status'), 'Guided review: the card count is a status region');
 { const fl = await p.evaluate(() => { const f = document.getElementById('flash'); return { role: f.getAttribute('aria-labelledby'), name: document.getElementById(f.getAttribute('aria-labelledby'))?.textContent.trim(), tab: f.getAttribute('tabindex') }; });
   ok(fl.name && fl.name.length > 0 && fl.tab === '0', 'Guided review: the card is named by its question ("' + (fl.name || '').slice(0, 30) + '") and can be focused'); }
-ok(/Space/.test(await p.textContent('#coach')) && /Space/.test(await p.textContent('.flash-hint')), 'Guided review: the hints mention the keyboard (Space)');
+ok(/Space/.test(await p.textContent('#gHint')), 'Guided review: the screen-reader hint mentions the keyboard (Space)');
 { const g = await p.evaluate(() => { const f = document.getElementById('flash').getBoundingClientRect(), r = document.getElementById('ratebar').getBoundingClientRect(), w = getComputedStyle(document.querySelector('.welcome')); return { gap: Math.round(r.top - f.bottom), want: Math.round(parseFloat(w.rowGap || w.gap) + parseFloat(getComputedStyle(document.getElementById('flash')).marginBottom)) }; });
   ok(g.want > 0 && g.gap === g.want, 'Guided review: the gap between the card and the button bar is the .welcome gap plus the card margin (' + g.gap + ' vs ' + g.want + ')'); }
-const text1 = await p.textContent('#coach');
+const count1 = await p.textContent('#gCount');
+await p.evaluate(() => { window.__count = document.getElementById('gCount'); });
 await p.focus('#flash'); await p.keyboard.press('Space');
 await p.waitForSelector('#ratebar .rate');
-ok(await p.evaluate(() => window.__coach === document.getElementById('coach') && window.__coach.isConnected), 'Guided review: the same #coach element stays in the page after the flip (only its text changes)');
-ok((await p.textContent('#coach')) !== text1 && /rate how well/i.test(await p.textContent('#coach')), 'Guided review: the coach text moved on to step 2');
+ok(await p.evaluate(() => window.__count === document.getElementById('gCount') && window.__count.isConnected), 'Guided review: the same count element stays in the page after the flip');
 { const b = await p.evaluate(() => { const r = document.querySelector('.rv-back'); return { role: r.getAttribute('role'), name: r.getAttribute('aria-label'), focused: document.activeElement === r }; });
   ok(b.role === 'region' && b.name === 'Answer' && b.focused, 'Guided review: the answer is a region named "Answer" and has focus'); }
 { const labels = await p.evaluate(() => [...document.querySelectorAll('#ratebar .rate')].map(b => b.getAttribute('aria-label')));
   ok(labels.length === 4 && labels.every((l, i) => l.startsWith(['Again', 'Hard', 'Good', 'Easy'][i] + ', next review in ')), 'Guided review: rating buttons say when the card comes back: ' + labels[2]); }
 await p.keyboard.press('3');
 await p.waitForSelector('.flash-front');
-ok(await p.evaluate(() => window.__coach === document.getElementById('coach')) && /Read the question/.test(await p.textContent('#coach')) && await p.evaluate(() => document.getElementById('flash').getAttribute('aria-labelledby') === 'gQ'), 'Guided review: the next card keeps the same #coach and goes back to step 1');
-ok(await p.evaluate(() => document.getElementById('coach').getAttribute('aria-atomic') === 'true'), 'Guided review: #coach is atomic');
+ok(await p.evaluate(() => window.__count === document.getElementById('gCount')) && (await p.textContent('#gCount')) !== count1 && await p.evaluate(() => document.getElementById('flash').getAttribute('aria-labelledby') === 'gQ'), 'Guided review: the next card keeps the same count element, moves it on and shows the question side');
 await p.close();
 
 await browser.close(); await real.close();

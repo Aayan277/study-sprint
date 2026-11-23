@@ -1,9 +1,8 @@
 // The first-run start: what a brand-new install opens on instead of a filled-in sample deck.
 //
 //   1. Pitch          a landing page: a mini card, three points and one button (two columns on a computer)
-//   2. Name your course   a name (plus an optional course code and exam date). This makes the first deck.
-//   3. Add cards      try the sample cards first, or paste notes, or import a file or Anki deck
-//   4. Guided review  about 3 cards, with short hints (a real review: the answers are saved)
+//   2. Add cards      try the sample cards first, or paste notes, or import a file or Anki deck (Import lets the person pick or create a deck)
+//   3. Guided review  about 3 cards (a real review: the answers are saved)
 //
 // Every step can be skipped, and once it has been finished or skipped it never shows again (the `onboarded`
 // setting, on this device only: see checkFirstRun() in app.js). Existing installs never see it.
@@ -15,7 +14,6 @@
 // (the empty Today screen adds the sample deck itself, with addSampleDeck() from sample.js)
 
 import * as db from './db.js';
-import { DECK_COLORS } from './decks.js';
 import { deckPath, subtreeIds, effectiveDeck } from './deck-tree.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { examOptions } from './exam.js';
@@ -24,7 +22,7 @@ import { formatInterval, formatIntervalLong } from './queue.js';
 import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { hasMasks, occlusionHTML, occLabel } from './occlusion.js';
-import { $, esc, plural, toast, icon, setFocusMode, onControl, showFieldError } from './ui.js';
+import { $, esc, plural, toast, icon, setFocusMode, onControl } from './ui.js';
 import { singleKeysOn } from './shortcuts.js';
 import { go as navGo, replace as navReplace } from './nav.js';
 
@@ -32,19 +30,17 @@ const GUIDE_CARDS = 3;
 // Handed to the Import screen: after it saves cards into this deck, it offers the guided review (see import-screen.js).
 export const FIRST_REVIEW_KEY = 'study-sprint-first-review';
 
-// The three steps so far. Kept while the page is open, so Back from step 3 returns to what you typed.
-let flow = { step: 'pitch', deckId: null, name: '', course: '', exam: '' };
+// The step the person is on. Kept while the page is open.
+let flow = { step: 'pitch' };
 
 // The logo from the page header.
 const MARK = '<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="3" width="22" height="24" rx="4" fill="var(--accent-line)"/><rect x="3" y="6" width="22" height="24" rx="4" fill="var(--accent)"/><path d="M15.5 10l-6 9h4.5l-1 6 6-9h-4.5z" fill="var(--on-accent)"/></svg>';
-
-const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 export async function renderWelcome(el, arg, api) {
   // #/welcome/review/<deck id>: the guided review.
   const m = /^review\/(.+)$/.exec(arg || '');
   if (m) return renderGuide(el, m[1], api);
-  flow = arg === 'again' ? { step: 'pitch', deckId: null, name: '', course: '', exam: '' } : flow;
+  flow = arg === 'again' ? { step: 'pitch' } : flow;
   draw(el, api);
 }
 
@@ -54,14 +50,13 @@ async function leave(api, hash = '#/today') {
   navReplace(hash);      // replace, so Back doesn't return to the start
 }
 
-// The little "Step 2 of 3" bar at the top of each step.
-const stepBar = n => `<div class="wl-bar" role="img" aria-label="Step ${n} of 3">${[1, 2, 3].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
+// The little "Step 2 of 2" bar at the top of each step.
+const stepBar = n => `<div class="wl-bar" role="img" aria-label="Step ${n} of 2">${[1, 2].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
 
 function draw(el, api) {
   setFocusMode(false);
   const { step } = flow;
   if (step === 'pitch') drawPitch(el, api);
-  else if (step === 'name') drawName(el, api);
   else drawAdd(el, api);
   el.querySelector('h1')?.focus({ preventScroll: true });
   scrollTo(0, 0);
@@ -99,60 +94,18 @@ function drawPitch(el, api) {
           ${demoHTML()}</div></div></div>
       </div>
     </div>`;
-  $('wlNext').addEventListener('click', () => { flow.step = 'name'; draw(el, api); });
+  $('wlNext').addEventListener('click', () => { flow.step = 'add'; draw(el, api); });
   $('wlSkip').addEventListener('click', () => leave(api));
   $('wlSignIn').addEventListener('click', () => api.finish());       // the link goes to Settings
 }
 
-// ----- 2. name your course -----
-function drawName(el, api) {
+// ----- 2. add cards -----
+function drawAdd(el, api) {
   el.innerHTML = `
     <div class="welcome">
       <div class="wl-top"><button class="back" type="button" id="wlBack">‹ Back</button><button class="link" type="button" id="wlSkip">Skip</button></div>
       ${stepBar(2)}
-      <h1 tabindex="-1">Name your course</h1>
-      <form id="wlForm" novalidate>
-        <label class="field"><span>Course name</span>
-          <input id="wlName" maxlength="80" required placeholder="e.g. Cell Biology" autocomplete="off" value="${esc(flow.name)}"></label>
-        <label class="field"><span>Course code</span>
-          <input id="wlCourse" maxlength="20" placeholder="e.g. BIOL 201" autocomplete="off" autocapitalize="characters" value="${esc(flow.course)}"></label>
-        <label class="field"><span>Exam date</span>
-          <input id="wlExam" type="date" class="${flow.exam ? '' : 'empty'}" min="${todayISO()}" value="${esc(flow.exam)}"></label>
-        <p class="err" id="wlErr" role="alert" hidden></p>
-        <button class="btn primary wide cta" type="submit">Create course</button>
-      </form>
-    </div>`;
-  $('wlBack').addEventListener('click', () => { flow.step = 'pitch'; draw(el, api); });
-  $('wlSkip').addEventListener('click', () => leave(api));
-  // An empty date box shows the browser's "dd/mm/yyyy" in full text colour; muted, it reads as a placeholder.
-  $('wlExam').addEventListener('input', () => $('wlExam').classList.toggle('empty', !$('wlExam').value));
-  $('wlForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const name = $('wlName').value.trim(), exam = $('wlExam').value;
-    const err = $('wlErr');
-    const fail = (msg, field) => showFieldError($(field), err, msg);
-    if (!name) return fail('Give the course a name, or tap Skip.', 'wlName');
-    if (exam && exam < todayISO()) return fail('That exam date has already passed.', 'wlExam');
-    Object.assign(flow, { name, course: $('wlCourse').value.trim(), exam });
-    // Going Back and then forward again updates the same deck instead of making a second one.
-    const old = flow.deckId && await db.getDeck(flow.deckId);
-    const deck = { ...(old || { id: db.newId(), color: DECK_COLORS[Math.floor(Math.random() * DECK_COLORS.length)], parentId: '', created: Date.now() }),
-      name, course: flow.course, examDate: exam || null };
-    await db.saveDeck(deck);
-    flow.deckId = deck.id;
-    flow.step = 'add';
-    draw(el, api);
-  });
-}
-
-// ----- 3. add cards -----
-function drawAdd(el, api) {
-  const deck = flow.deckId;
-  el.innerHTML = `
-    <div class="welcome">
-      <div class="wl-top"><button class="back" type="button" id="wlBack">‹ Back</button><button class="link" type="button" id="wlSkip">Skip</button></div>
-      ${stepBar(3)}
-      <h1 tabindex="-1">Add cards to ${esc(flow.name)}</h1>
+      <h1 tabindex="-1">Add cards</h1>
       <div class="wl-opts">
         <button class="wl-opt fr-first" type="button" id="wlSample">
           <span class="wl-opt-t">Try it with sample cards</span>${icon('chevron')}</button>
@@ -163,14 +116,11 @@ function drawAdd(el, api) {
       </div>
       <p class="wl-foot"><button class="link" type="button" id="wlLater">I'll add cards later</button></p>
     </div>`;
-  $('wlBack').addEventListener('click', () => { flow.step = 'name'; draw(el, api); });
+  $('wlBack').addEventListener('click', () => { flow.step = 'pitch'; draw(el, api); });
   $('wlSkip').addEventListener('click', () => leave(api, '#/today'));
-  $('wlLater').addEventListener('click', () => leave(api, `#/deck/${deck}`));
-  // Paste and file go to Import with this deck chosen. After the cards are saved, Import offers the guided review.
-  const toImport = async tab => {
-    try { sessionStorage.setItem(FIRST_REVIEW_KEY, deck); } catch { /* fine without */ }
-    await leave(api, `#/import/${deck}${tab ? '/' + tab : ''}`);
-  };
+  $('wlLater').addEventListener('click', () => leave(api, '#/today'));
+  // Paste and file go to Import with no deck chosen: Import lets the person pick a deck or make a new one.
+  const toImport = tab => leave(api, `#/import//${tab}`);
   $('wlPaste').addEventListener('click', () => toImport('paste'));
   $('wlFile').addEventListener('click', () => toImport('file'));
   $('wlSample').addEventListener('click', async () => {
@@ -181,7 +131,7 @@ function drawAdd(el, api) {
   });
 }
 
-// ----- 4. the guided review -----
+// ----- 3. the guided review -----
 // A real first review of a few cards: each rating is saved (so the cards are scheduled), with hints on what to do.
 let G = null;
 // The face that is turned away is hidden from screen readers and can't be focused (like Review).
@@ -211,7 +161,6 @@ function optsFor(card, now = Date.now()) {
   return examOptions(deckSchedulerOptions(G.settings, deck), deck, now);
 }
 
-const MOUSE = matchMedia('(hover: hover) and (pointer: fine)');
 function drawGuide() {
   const { el, cards, i, flipped } = G;
   if (i >= cards.length) return drawGuideDone();
@@ -226,31 +175,22 @@ function drawGuide() {
   const fullPath = deckPath(G.decks, card.deckId);
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}</span>`;
   const backSize = answerSize(plainText(card.back));
-  // The page frame (count, Skip, and the #coach status line) is drawn once; only its text changes between cards, so a screen reader
-  // hears the new step instead of a status region that was thrown away and rebuilt.
-  if (!el.querySelector('#coach')) {
+  // The page frame (count and Skip) is drawn once; only the card below it changes between cards.
+  if (!el.querySelector('#gStage')) {
     el.innerHTML = `
     <div class="welcome guide">
-      <div class="wl-top"><span class="wl-count mono" id="gCount"></span><button class="link" type="button" id="gSkip">Skip the walk-through</button></div>
-      <p class="coach" id="coach" role="status" aria-atomic="true"><b id="coachN"></b><span id="coachT"></span><span class="coach-key" id="coachK"></span></p>
+      <div class="wl-top"><span class="wl-count mono" id="gCount" role="status"></span><button class="link" type="button" id="gSkip">Skip the walk-through</button></div>
       <div id="gStage"></div>
     </div>`;
     $('gSkip').addEventListener('click', () => { const api = G.api; G = null; setFocusMode(false); leave(api); });
   }
   $('gCount').textContent = `Card ${i + 1} of ${cards.length}`;
-  $('coachN').textContent = flipped ? '2' : '1';
-  $('coachT').textContent = flipped
-    ? ' Now rate how well you knew it. This tells the app when to show the card again.'
-    : ` Read the question, try to recall the answer, then ${MOUSE.matches ? 'click the card or press Space' : 'tap the card'} to flip it.`;
-  $('coachK').textContent = flipped ? 'Again: forgot · Hard: barely · Good: got it · Easy: instantly' : '';
-  $('coachK').hidden = !flipped;
   $('gStage').innerHTML = `
       <article class="flash rv-card${flipped ? ' flipped' : ''}" id="flash" ${flipped ? 'tabindex="-1"' : 'tabindex="0" aria-labelledby="gQ" aria-describedby="gHint"'}>
         <div class="rv-turn">
           <div class="rv-face rv-front" ${flipped ? HIDDEN : ''}>${deckLabel}
             <div class="flash-front${size}" id="gQ">${front}</div>
-            <span class="sr-only" id="gHint">Press Space or Enter to show the answer</span>
-            <p class="flash-hint">${MOUSE.matches ? 'Click or press Space to flip' : 'Tap to flip'}</p></div>
+            <span class="sr-only" id="gHint">Press Space or Enter to show the answer</span></div>
           <div class="rv-face rv-back" tabindex="-1" role="region" aria-label="Answer" ${flipped ? '' : HIDDEN}>${deckLabel}
             ${occ ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
             <div class="flash-ans"><div class="flash-back${backSize}${occ ? ' occ-back' : ''}">${occ
@@ -323,10 +263,8 @@ async function drawGuideDone() {
   const api = G.api, deckId = G.deckId;
   G = null;
   setFocusMode(false);
-  // After the sample cards, the next step is the course named in step 2 (the newest deck that is not the sample),
-  // or the person's own cards if there is none. After cards the person added themselves, there is nothing to add.
+  // After the sample cards, the next step is adding the person's own cards. After cards they added themselves, there is nothing to add.
   const sample = deckId === 'sample';
-  const course = sample ? (await db.getDecks()).filter(d => d.id !== 'sample').sort((a, b) => b.created - a.created)[0] : null;
   if (!el.isConnected) return;
   el.innerHTML = `
     <div class="welcome">
@@ -339,8 +277,8 @@ async function drawGuideDone() {
       ${seen.length ? `<ul class="fr-when">${seen.map(x => `<li><b>${esc(plainText(x.card.front))}</b><span>${comesBack(x.due)}</span></li>`).join('')}</ul>` : ''}
       ${saved < cards.length ? '<p class="note">The scheduler could not load, so nothing was saved. Connect to the internet and review these cards from Today.</p>' : ''}
       ${sample ? `<div class="fr-next"><span class="fr-k">Next</span>
-          <b>${course ? `Add your ${esc(course.name)} cards` : 'Add your own cards'}</b>
-          <a class="btn primary wide cta" id="wlAdd" href="#/import${course ? '/' + esc(course.id) : ''}">${icon('paste')} ${course ? `Add ${esc(course.name)} cards` : 'Add cards'}</a></div>`
+          <b>Add your own cards</b>
+          <a class="btn primary wide cta" id="wlAdd" href="#/import">${icon('paste')} Add cards</a></div>`
         : `<ul class="wl-points">
           <li>${icon('play')}<span><b>Today</b> has one Start button for everything due.</span></li>
           <li>${icon('bolt')}<span><b>Play</b> turns your cards into timed rounds for cramming.</span></li>
