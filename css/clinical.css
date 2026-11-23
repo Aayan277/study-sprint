@@ -543,7 +543,7 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams{box-shadow:0 0 0 1px var(--line-strong)}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .section > h2,
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sec-head h2{font-size:var(--fs-base);font-weight:650;color:var(--text)}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .section > h2{font-size:1.25rem;letter-spacing:-.015em}   /* Settings: real section headings, above the 16px row titles */
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] :is(.section > h2,.section > .h-row > h2){font-size:1.25rem;letter-spacing:-.015em}   /* Settings: real section headings, above the 16px row titles */
 
 /* ---------- Decks: one ruled list ---------- */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .decks{gap:0;box-shadow:0 0 0 1px var(--line-strong);border-radius:var(--r-md);overflow:hidden}

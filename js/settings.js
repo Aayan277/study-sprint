@@ -72,8 +72,7 @@ export async function renderSettings(el) {
     </nav>
 
     <section class="section" aria-labelledby="appearTitle">
-      <h2 id="appearTitle">Appearance</h2>
-      <p class="note">${helpLink('device-only', '?', 'Which settings apply to this device only')}</p>
+      <div class="h-row"><h2 id="appearTitle">Appearance</h2>${helpLink('device-only', '?', 'Which settings apply to this device only')}</div>
       <h3 class="set-sub" id="thTitle">${accentTitle(ui)}</h3>
       <div class="skins" id="skins">${skinButtonsHTML(skin)}</div>
       <h3 class="set-sub" id="apTitle">Light or dark</h3>

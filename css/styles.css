@@ -1023,7 +1023,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .slider-row output b{color:var(--text);font:600 var(--fs-md) var(--f-num)}
 .start-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:6px 0 4px}
 .start-row .btn{padding:14px 30px;font-size:1.05rem}
-@media (min-width:701px){:root:not([data-ui="clinical"]) main[data-route="play"] .start-row .btn{flex:none;min-width:240px}}
+@media (min-width:701px){:root:not([data-ui="clinical"]) main[data-route="play"] .start-row .btn{flex:1 1 240px;min-width:240px}}
 /* Round 4 (Original style): one label style on Play and Settings */
 :root:not([data-ui="clinical"]) main[data-route="play"] legend,
 :root:not([data-ui="clinical"]) main[data-route="settings"] .set-sub,
@@ -1417,7 +1417,20 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .inline-num input{width:96px;font:600 var(--fs-md) var(--f-num);padding:9px 10px}
 .switch-row{grid-template-columns:minmax(0,1fr) auto;align-items:center;cursor:pointer}
 .switch-row > span{display:grid;gap:4px}
-.help-link{display:inline-grid;place-items:center;justify-self:start;min-width:24px;min-height:24px}
+.help-link{display:inline-grid;place-items:center;justify-self:start;vertical-align:middle;position:relative;box-sizing:border-box;width:24px;height:24px;min-width:24px;min-height:24px;margin-left:6px;border:1px solid var(--line-strong);border-radius:50%;text-decoration:none;color:var(--text-2);font-size:var(--fs-xs);font-weight:600;line-height:1}
+@media (hover:hover) and (pointer:fine){.help-link:hover{color:var(--text);background:var(--surface-2)}}
+.adv-row:has(> b + .help-link){grid-template-columns:auto minmax(0,1fr);column-gap:0;align-items:center}
+.adv-row:has(> b + .help-link) > :not(b):not(.help-link){grid-column:1 / -1}
+.adv-row:has(> b + .help-link) > .help-link{justify-self:start}
+.switch-row > span:has(> .help-link){display:flex;align-items:center}
+/* A heading with its "?" at the end of the line (Settings sections) */
+.h-row{display:flex;align-items:center;gap:var(--s-1);margin:0 0 var(--s-3)}
+.h-row > h2{margin:0}
+.h-row > .help-link{margin-left:0}
+/* A fieldset whose "?" sits right after its legend (Play: Format) */
+.fs-help > legend{float:left;margin-bottom:0}
+.fs-help > .help-link{float:left;margin-left:6px;margin-top:-3px}
+.fs-help > :not(legend):not(.help-link){clear:both}
 .chips + .switch-row{margin-top:var(--s-4)}
 .switch-row > span > span{font-size:var(--fs-sm);color:var(--text-2)}
 /* A switch: its edge is a 3:1 color, and a checked switch is accent with the knob on the right */
@@ -2648,14 +2661,15 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 .set-nav a{flex:none;display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--text-2);font:500 var(--fs-sm) var(--f-ui);text-decoration:none}
 @media (max-width:359px){.set-nav{gap:6px}.set-nav a{padding:0 8px;font-size:var(--fs-xs)}}
 @media (hover:hover) and (pointer:fine){.set-nav a:hover{border-color:var(--line-strong);background:var(--surface-2);color:var(--text)}}
-main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57px) + 60px);font-size:1.25rem;font-weight:650;letter-spacing:-.015em;line-height:1.25;margin-bottom:var(--s-2)}
+main[data-route="settings"] :is(.section > h2,.section > .h-row > h2){scroll-margin-top:calc(var(--top-h,57px) + 60px);font-size:1.25rem;font-weight:650;letter-spacing:-.015em;line-height:1.25;margin-bottom:var(--s-2)}
 .set-sub{margin:var(--s-4) 0 var(--s-2);font-size:var(--fs-base);color:var(--text-2);font-weight:600}
 /* One row-title style (16px, 600) for every setting: plain rows, switch rows, the "Advanced" folds and the help rows. Small words in <b> inside a hint stay inline. */
 main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > span:first-child > b,.adv-row > b,.adv-row > label > b,.advanced > summary){font-size:var(--fs-md);font-weight:600;color:var(--text);letter-spacing:-.005em}
-#appearTitle + .set-sub{margin-top:var(--s-2)}
+main[data-route="settings"] .h-row{margin-bottom:var(--s-2)}
+main[data-route="settings"] .h-row + .set-sub{margin-top:var(--s-2)}
 @media (min-width:1024px){
   .set-nav{top:0;margin-inline:0;padding-inline:0;background:color-mix(in srgb,var(--bg) 94%,transparent)}
-  main[data-route="settings"] .section > h2{scroll-margin-top:64px}
+  main[data-route="settings"] :is(.section > h2,.section > .h-row > h2){scroll-margin-top:64px}
   .skins{grid-template-columns:repeat(5,minmax(0,1fr))}
   .skins .skin{flex-direction:column;align-items:flex-start;gap:var(--s-2)}
   .skins .skin .pv{width:100%;height:48px}
@@ -3313,11 +3327,6 @@ main h2[tabindex="-1"]{outline:none}
    Settings "?" help links: a small round 24px "?" next to its label, with a see-through 44px tap area on touch.
    Clinical has no tap boxes of its own, so its small controls are made 44px here. */
 @media (max-width:599.98px){
-  .help-link{display:inline-grid;vertical-align:middle;position:relative;box-sizing:border-box;width:24px;height:24px;min-width:24px;min-height:24px;margin-left:6px;border:1px solid var(--line-strong);border-radius:50%;text-decoration:none;color:var(--text-2);font-size:var(--fs-xs);font-weight:600;line-height:1}
-  .adv-row:has(> b + .help-link){grid-template-columns:auto minmax(0,1fr);column-gap:0;align-items:center}
-  .adv-row:has(> b + .help-link) > :not(b):not(.help-link){grid-column:1 / -1}
-  .adv-row:has(> b + .help-link) > .help-link{justify-self:start}
-  .switch-row > span:has(> .help-link){display:flex;align-items:center}
   .prow textarea{min-height:44px}
   html[data-ui="clinical"] .chip span{min-height:44px}
   html[data-ui="clinical"] .fmt-tools button{min-width:44px!important;min-height:44px!important}
