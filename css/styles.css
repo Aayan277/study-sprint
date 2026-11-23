@@ -2911,7 +2911,12 @@ main[data-route="settings"] .h-row + .set-sub{margin-top:var(--s-2)}
 .rs-scale > span:nth-child(1){--p:0;transform:none}
 .rs-scale > span:nth-child(2){--p:.5}
 .rs-scale > span:nth-child(3){--p:1;transform:translateX(-100%)}
-@media (min-width:700px){.rs-row,.rs-axis{grid-template-columns:190px minmax(0,1fr) 230px;column-gap:var(--s-4)}}
+@media (min-width:700px){
+  .rs-row,.rs-axis{grid-template-columns:190px minmax(0,520px) minmax(0,230px);justify-content:start;column-gap:var(--s-4);padding-inline:var(--s-2);margin-inline:calc(-1 * var(--s-2))}
+  .rs-row{padding-block:2px;border-radius:var(--r-sm)}
+  .rs-row .rs-val{text-align:left}
+}
+@media (min-width:700px) and (hover:hover) and (pointer:fine){.rs-row:hover{background:var(--surface-2)}}
 @media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px minmax(0,1fr) 112px}.rs-scale > span:nth-child(2){display:none}}
 
 /* ---- Phone tap targets (< 600px, Original style only): every control gets at least 44x44 px to tap -----------------------
