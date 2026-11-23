@@ -114,7 +114,7 @@ function drawName(el, api) {
       <form id="wlForm" novalidate>
         <label class="field"><span>Course name</span>
           <input id="wlName" maxlength="80" required placeholder="e.g. Cell Biology" autocomplete="off" value="${esc(flow.name)}"></label>
-        <label class="field"><span>Course code</span>
+        <label class="field"><span>Course code <span class="opt-tag">(optional)</span></span>
           <input id="wlCourse" maxlength="20" placeholder="e.g. BIOL 201" autocomplete="off" autocapitalize="characters" value="${esc(flow.course)}"></label>
         <label class="field"><span>Exam date</span>
           <input id="wlExam" type="date" class="${flow.exam ? '' : 'empty'}" min="${todayISO()}" value="${esc(flow.exam)}"></label>

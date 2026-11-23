@@ -600,7 +600,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <label class="field"><span>Name</span>
         <input id="deckName" maxlength="80" required placeholder="e.g. Cell Biology" value="${esc(deck?.name || '')}" aria-describedby="deckErr"></label>
       <p class="err" id="deckErr" role="alert" hidden></p>
-      <label class="field"><span>Course code</span>
+      <label class="field"><span>Course code <span class="opt-tag">(optional)</span></span>
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
       <label class="field"><span>Exam date</span>
         <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}"></label>
