@@ -602,7 +602,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <p class="err" id="deckErr" role="alert" hidden></p>
       <label class="field"><span>Course code <span class="opt-tag">(optional)</span></span>
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
-      <label class="field"><span>Exam date</span>
+      <label class="field"><span>Exam date <span class="opt-tag">(optional)</span></span>
         <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}"></label>
       ${places.length ? `<label class="field"><span>Inside</span>
         <select id="deckParent" class="select"><option value="">Nothing (a top-level deck)</option>${places.map(c => `<option value="${esc(c.id)}" ${c.id === parentNow ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>` : '<input type="hidden" id="deckParent" value="">'}

@@ -9,7 +9,7 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
   { version: '4.69', items: [
-    'The Course code field now says it is optional when you make or edit a deck.',
+    'Course code and Exam date now say they are optional when you make or edit a deck.',
   ] },
   { version: '4.68', items: [
     'Anki import shows one line saying what comes along, with Change to see the options.',
