@@ -3294,9 +3294,9 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) body.focus:has(main[data-route="review"]) .ratebar{padding-top:var(--s-3);background:var(--bg)}
 }
 @media (min-width:1024px){
-  :root:not([data-ui="clinical"]) body.focus:has(main[data-route="review"]) :is(.top,.tabs){display:none}
-  :root:not([data-ui="clinical"]) body.focus:has(main[data-route="review"]) main{margin-left:0}
-  :root:not([data-ui="clinical"]) body.focus:has(main[data-route="review"]) :is(.toast,.update-bar){left:50%}
+  :root:not([data-ui="clinical"]) body.focus:has(:is(main[data-route="review"],main[data-route="play"])) :is(.top,.tabs){display:none}
+  :root:not([data-ui="clinical"]) body.focus:has(:is(main[data-route="review"],main[data-route="play"])) main{margin-left:0}
+  :root:not([data-ui="clinical"]) body.focus:has(:is(main[data-route="review"],main[data-route="play"])) :is(.toast,.update-bar){left:50%}
   :root:not([data-ui="clinical"]) body.focus main[data-route="review"] > .view,
   :root:not([data-ui="clinical"]) body.focus main[data-route="review"] > .view > *{max-width:980px}
   /* the card is pinned to the top (not centred), so a longer answer never pushes the question up */
