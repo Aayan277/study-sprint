@@ -299,6 +299,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 }
 .field{display:grid;gap:6px}
 .field > span{font-size:var(--fs-xs);font-weight:500;color:var(--text-2)}
+.field .opt-tag{font-weight:400}
 .field input{width:100%;min-width:0;font-size:var(--fs-md);padding:11px 13px}
 .field select,.field textarea{width:100%;min-width:0;font-size:var(--fs-md);padding:11px 13px}
 .field textarea{line-height:1.45;resize:vertical}
