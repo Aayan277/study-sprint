@@ -1028,8 +1028,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 @media (min-width:701px){:root:not([data-ui="clinical"]) main[data-route="play"] .start-row .btn{flex:1 1 240px;min-width:240px}}
 /* Round 4 (Original style): one label style on Play and Settings */
 :root:not([data-ui="clinical"]) main[data-route="play"] legend,
-:root:not([data-ui="clinical"]) main[data-route="settings"] .set-sub,
-:root:not([data-ui="clinical"]) main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > span:first-child > b,.adv-row > b,.adv-row > label > b){color:var(--text-2);font-weight:600;font-size:var(--fs-sm)}
+:root:not([data-ui="clinical"]) main[data-route="settings"] .set-sub{color:var(--text-2);font-weight:600;font-size:var(--fs-sm)}
 @media (max-width:700px){
   :root:not([data-ui="clinical"]) main[data-route="import"] .pane-actions{flex-wrap:nowrap;gap:6px}
   :root:not([data-ui="clinical"]) main[data-route="import"] .pane-actions .btn{flex:0 1 auto;min-width:0;padding:6px 10px;font-size:var(--fs-sm);white-space:nowrap}
@@ -3421,8 +3420,10 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) .today-hero{grid-template-columns:minmax(0,1fr) auto;justify-content:stretch}
   :root:not([data-ui="clinical"]) .today-hero .btn.big,
   :root:not([data-ui="clinical"]) .today-hero .th-done{justify-self:end;align-self:center}
-  :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row{grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:start}
-  :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row > .switch{grid-column:1;grid-row:1;margin-top:1px}
+  :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row{grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:center}
+  :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row > .switch{grid-column:1;grid-row:1}
+  :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row:has(> span > span){align-items:start}
+  :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row:has(> span > span) > .switch{margin-top:1px}
   :root:not([data-ui="clinical"]) main[data-route="settings"] .switch-row > span{grid-column:2;grid-row:1}
 }
 

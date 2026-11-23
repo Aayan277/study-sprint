@@ -746,8 +746,10 @@
   /* --- Settings: every control sits next to its label, in a column you can read across ---
      Switches come first on their line, like a checkbox, with the name and the explanation beside them; steppers, number
      boxes and buttons go under their label instead of out at the far edge of the row. */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row{grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:start}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row > .switch{grid-column:1;grid-row:1;margin-top:1px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row{grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:center}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row > .switch{grid-column:1;grid-row:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row:has(> span > span){align-items:start}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row:has(> span > span) > .switch{margin-top:1px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row > span{grid-column:2;grid-row:1;font-size:var(--fs-base);color:var(--text)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column){display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;row-gap:10px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column) > :first-child{justify-self:stretch}

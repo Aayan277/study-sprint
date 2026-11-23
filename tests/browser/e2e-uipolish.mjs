@@ -366,11 +366,11 @@ for (const ui of ['original', 'clinical']) {
   const r = await p.evaluate(() => {
     const cs = e => { const x = getComputedStyle(e); return [parseFloat(x.fontSize), +x.fontWeight]; };
     const titles = [...document.querySelectorAll('main .set-row > div:first-child > b, main .switch-row > span:first-child > b, main .adv-row > b, main .adv-row > label > b, main .advanced > summary')];
-    return { h2: [...document.querySelectorAll('.section > h2')].map(cs), titles: titles.map(e => cs(e).join('/')), n: titles.length };
+    return { h2: [...document.querySelectorAll('.section > h2, .section > .h-row > h2')].map(cs), titles: titles.map(e => cs(e).join('/')), n: titles.length };
   });
-  ok(r.h2.length === 5 && r.h2.every(([f, w]) => f === 20 && w >= 600), `M8 (${ui}): the five section headings are 20px bold (${JSON.stringify(r.h2[0])})`);
-  // (round 4: in the Original style the row titles are one quieter 13px / 600 grey; Clinical keeps 16px)
-  const want = ui === 'original' ? '13/600' : '16/600';
+  ok(r.h2.length === 5 && r.h2.every(([f, w]) => f === 19 && w === 600), `M8 (${ui}): the five section headings are 19px / 600 (UI #2: the one section-heading size) (${JSON.stringify(r.h2[0])})`);
+  // (UI #8: both styles use the 16px / 600 normal-colour row title)
+  const want = '16/600';
   ok(r.n >= 30 && r.titles.every(t => t === want), `M8 (${ui}): all ${r.n} row titles are ${want.replace('/', 'px / ')} (${[...new Set(r.titles)].join(', ')})`);
   await p.context().close();
 }
