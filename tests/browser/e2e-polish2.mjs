@@ -338,6 +338,20 @@ await p.reload(); await p.waitForSelector('#deckGrid .deck');
 ok(await p.evaluate(() => { const byRow = {}; for (const d of document.querySelectorAll('#deckGrid > .deck')) { const r = d.getBoundingClientRect(); (byRow[Math.round(r.y)] ||= []).push(Math.round(r.height)); } return Object.values(byRow).every(hs => new Set(hs).size === 1); }), 'off: tiles in a row all stretch to the same height, as before');
 await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('compactDecks', true); });
 
+// ---------- the "mastered" number is for Original on a computer only; the ring stays everywhere else ----------
+for (const [label, w, h, clinical] of [['Original at 390', 390, 844, false], ['Clinical at 1440', 1440, 900, true]]) {
+  const o = await open(w, h);
+  await o.p.goto('http://localhost:8123/#/decks'); await o.p.waitForSelector('.deck');
+  await seed(o.p);
+  if (clinical) await o.p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('theme', { ui: 'clinical', skin: 'violet', mode: 'light', oled: false }); });
+  await o.p.reload(); await o.p.waitForSelector('#deckGrid .deck');
+  const row = await o.p.evaluate(() => { const r = document.querySelector('[data-open="bio"]').closest('.deck'); const vis = s => { const e = r.querySelector(s); return !!e && getComputedStyle(e).display !== 'none'; }; return { ui: document.documentElement.dataset.ui, mastered: vis('.deck-mastered'), ring: vis('.deck-ring') }; });
+  ok((row.ui === 'clinical') === clinical, label + ': the right style is on: ' + row.ui);
+  ok(!row.mastered, label + ': ".deck-mastered" is not shown');
+  ok(row.ring, label + ': the ring is shown on the deck row');
+  await o.ctx.close();
+}
+
 // ---------- B7: three columns ----------
 await go(p, '#/deck/law', '.crow');
 // Round 2 A4: with the sidebar open its deck list is enough, so the tree column is hidden and the card list gets the width;

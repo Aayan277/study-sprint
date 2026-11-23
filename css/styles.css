@@ -1824,7 +1824,6 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 /* The hint above the card in the guided review */
 .coach{margin:0;padding:var(--s-3) var(--s-4);border-radius:var(--r-md);background:var(--accent-tint);border:1px solid var(--accent-line);color:var(--text);font-size:var(--fs-base);line-height:1.4}
 .coach b{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:8px;border-radius:50%;background:var(--accent);color:var(--on-accent);font:600 var(--fs-xs) var(--f-num)}
-.coach-key{display:block;margin-top:4px;font-size:var(--fs-sm);color:var(--text-2)}
 .guide .flash{min-height:min(50dvh,420px)}
 .guide #gStage{display:contents}
 .wl-done{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);border:1px solid var(--accent-line)}
@@ -2611,12 +2610,6 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 .sheet-foot:has(> .ac-why){flex-wrap:wrap}
 .sheet-foot .ac-why{flex:0 0 100%;margin:0;font-size:var(--fs-sm);line-height:1.4;color:var(--text-2)}
 .sheet-foot .ac-why[hidden]{display:none}
-/* Welcome: an empty exam date looks like a placeholder, not a chosen date */
-#wlExam.empty{color:var(--text-3)}
-#wlExam.empty::-webkit-datetime-edit{color:var(--text-3)}
-#wlExam{text-align:left}
-#wlExam::-webkit-date-and-time-value{text-align:left}
-#wlExam::-webkit-datetime-edit{padding:0}
 
 /* ---------- 28. Review: the finish screen, the corner Speak button, the occlusion picture (js/review.js) ---------- */
 /* The finish screen: the primary action, then a quiet row of links */

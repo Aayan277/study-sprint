@@ -184,7 +184,8 @@ function drawGuide() {
     </div>`;
     $('gSkip').addEventListener('click', () => { const api = G.api; G = null; setFocusMode(false); leave(api); });
   }
-  $('gCount').textContent = `Card ${i + 1} of ${cards.length}`;
+  const t = `Card ${i + 1} of ${cards.length}`;
+  if ($('gCount').textContent !== t) $('gCount').textContent = t;
   $('gStage').innerHTML = `
       <article class="flash rv-card${flipped ? ' flipped' : ''}" id="flash" ${flipped ? 'tabindex="-1"' : 'tabindex="0" aria-labelledby="gQ" aria-describedby="gHint"'}>
         <div class="rv-turn">
