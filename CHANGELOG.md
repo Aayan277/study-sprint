@@ -2,7 +2,7 @@
 
 One entry per release, newest first. Up to v4.58 these are the detailed notes that used to live in PLAN.md; from v4.59 they are the short notes from `js/whats-new.js` (the app shows those under Settings → About → See what’s new). Versions before v4.8.1 have no entry here; see docs/plan-history.md.
 
-- **v4.71:** Clearer headings and help buttons that line up. On a computer, Settings has a section list at the side, Play rounds fill the screen like Review, and buttons on Review show their name and keyboard shortcut when you point at them. The time on Start says “about 17 min” instead of “~17 min”.
+- **v4.71:** Clearer headings, and the round ? help buttons now line up with their text. On a computer: Settings has a side list, Play rounds fill the screen, and Review buttons show their shortcut when you point at them. The time on Start now says “about 17 min” instead of “~17 min”.
 - **v4.70:** The first run no longer asks for a course: try the Sample deck or add your own cards. On a computer, Decks shows one deck per row, with the menu always on the right.
 - **v4.69:** Course code and Exam date now say they are optional when you make or edit a deck.
 - **v4.68:** Anki import shows one line saying what comes along, with Change to see the options. Once installed, the app can open Anki files offline after it has been online once. Add exam date on Today is one button, and searching by tag on Decks now counts matching cards.
