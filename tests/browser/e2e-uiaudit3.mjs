@@ -59,7 +59,7 @@ const visibleHints = p => p.evaluate(() => [...document.querySelectorAll('.key-h
   await tall(p, '#tab-paste', 'the Import "Paste" tab');
   await go(p, '#/stats', '.chart');
   await tall(p, '.chart-table > summary', '"Show as table"');
-  ok(await p.locator('.chart-table > summary').first().evaluate(e => getComputedStyle(e).display === 'list-item'), '"Show as table" keeps its disclosure triangle');
+  ok(await p.locator('.chart-table > summary').first().evaluate(e => getComputedStyle(e, '::after').content !== 'none' && getComputedStyle(e).listStyleType === 'none'), '"Show as table" has a chevron at the right edge (UI #7: one fold style)');
   // the editor toolbar and Review's top buttons are icon buttons: at least 40x40
   await go(p, '#/deck/sample', '.crow'); await p.locator('.crow').first().click(); await p.waitForSelector('#ceForm');
   { const [w, h] = await sizeOf(p, '.fmt-tools button'); ok(w >= 40 && h >= 40, `an editor toolbar button is at least 40x40 (${w}x${h})`); }

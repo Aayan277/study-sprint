@@ -10,7 +10,7 @@ import { addSampleDeck } from './sample.js';
 import { initInstall, isInstalled } from './install.js';
 import { initPanelResize } from './panel-resize.js';
 import { takeDraft } from './import-draft.js';
-import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty } from './ui.js';
+import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty, initHints } from './ui.js';
 import { account } from './sync-state.js';
 import { initWhatsNew } from './whats-new.js';
 import { takeLaunch } from './study-data.js';
@@ -25,7 +25,7 @@ import { initUpdates, showUpdateRequired } from './update.js';
 import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
 // Shown in Settings → About, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.70';
+const APP_VERSION = '4.71';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
@@ -191,7 +191,8 @@ async function route() {
   const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
   // (A running Review session counts as Today.)
-  const tab = name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name === 'help' ? 'settings' : name;
+  const onPc = matchMedia('(min-width: 1024px)').matches;      // (on a PC the Add cards button is the current item on the import screen, not Decks)
+  const tab = name === 'import' && onPc ? '' : name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name === 'help' ? 'settings' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
@@ -409,6 +410,7 @@ async function start() {
   initTapGuard();
   wireGear();
   initSidebar({ version: APP_VERSION });
+  initHints();
   initWhatsNew({ version: APP_VERSION });
   watchMath();       // draws the maths on cards (js/math.js, loaded when the first formula appears) wherever it appears
   // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).

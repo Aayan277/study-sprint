@@ -33,8 +33,9 @@ for (const [w, h, mode] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 900,
   await p.click('#setNav a[data-sec=studyTitle]');
   await p.waitForFunction(() => document.getElementById('studyTitle').getBoundingClientRect().top < innerHeight / 2, null, { timeout: 4000 });
   await p.waitForTimeout(700);
-  const stuck = await p.evaluate(() => { const r = document.getElementById('setNav').getBoundingClientRect(); const t = document.getElementById('studyTitle').getBoundingClientRect(); return { navTop: r.top, navBottom: r.bottom, titleTop: t.top }; });
-  ok(stuck.navTop < 80 && stuck.titleTop >= stuck.navBottom - 1, `${tag}: after a jump the row stays at the top and the heading sits below it (${JSON.stringify(stuck)})`);
+  const stuck = await p.evaluate(() => { const r = document.getElementById('setNav').getBoundingClientRect(); const t = document.getElementById('studyTitle').getBoundingClientRect(); return { navTop: r.top, navBottom: r.bottom, titleTop: t.top, side: getComputedStyle(document.getElementById('setNav')).display === 'grid' }; });
+  // (UI #6: from 1280px wide the row is a list beside the column, so the heading need not sit below it)
+  ok(stuck.navTop < 80 && (stuck.side || stuck.titleTop >= stuck.navBottom - 1), `${tag}: after a jump the row stays at the top and the heading sits below it (${JSON.stringify(stuck)})`);
   ok(await p.evaluate(() => location.hash) === '#/settings', `${tag}: the route is still #/settings`);
   if (w >= 1024) {
     const tops = await p.$$eval('#skins .skin', b => b.map(x => Math.round(x.getBoundingClientRect().top)));
@@ -89,9 +90,10 @@ for (const [w, h, mode] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 900,
   ok(await p.locator('.info-fold').count() === 0, `${tag}: the Retention card has no fine print`);
   // answers start 70 days before 14 Oct 2026 (6 Aug), so the calendar starts in August
   const cal = await p.evaluate(() => ({ cells: document.querySelectorAll('#calGrid i').length, firstMonth: [...document.querySelectorAll('.cal-m')].find(m => m.textContent)?.textContent }));
-  ok(cal.cells < 53 * 7 && cal.cells >= 9 * 7 && cal.cells <= 14 * 7 && cal.cells % 7 === 0, `${tag}: the calendar starts at the first month with answers (${cal.cells / 7} weeks)`);
+  // (UI #5: from 1024px wide the calendar shows the whole past year)
+  ok(w >= 1024 ? cal.cells === 53 * 7 : cal.cells < 53 * 7 && cal.cells >= 9 * 7 && cal.cells <= 14 * 7 && cal.cells % 7 === 0, `${tag}: the calendar ${w >= 1024 ? 'shows the whole year' : 'starts at the first month with answers'} (${cal.cells / 7} weeks)`);
   const first = await p.$eval('#calGrid i[data-t]', i => new Date(+i.dataset.t));
-  ok(first.getMonth() === 6 && first.getDate() >= 27 || first.getMonth() === 7 && first.getDate() <= 3, `${tag}: its first column is the week that holds 1 Aug (${first.toDateString()})`);
+  if (w < 1024) ok(first.getMonth() === 6 && first.getDate() >= 27 || first.getMonth() === 7 && first.getDate() <= 3, `${tag}: its first column is the week that holds 1 Aug (${first.toDateString()})`);
   const hard = await p.$eval('.hard-list li', li => ({ f: li.querySelector('.f').textContent, img: li.querySelector('img.hard-thumb') && { w: li.querySelector('img').getBoundingClientRect().width, h: li.querySelector('img').getBoundingClientRect().height } }));
   ok(hard.f === 'Mitochondria' && hard.img && Math.round(hard.img.w) === 40 && Math.round(hard.img.h) === 40, `${tag}: Hardest shows the occlusion label and a 40px thumbnail (${JSON.stringify(hard)})`);
   await p.waitForFunction(() => document.querySelector('.hard-thumb')?.naturalWidth > 0, null, { timeout: 4000 }).then(() => ok(true, `${tag}: the thumbnail loads`), () => ok(false, `${tag}: the thumbnail loads`));

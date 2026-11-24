@@ -307,13 +307,13 @@ export function sessionMs(due, fresh, cardMs, learningSteps = 2) {
   const views = Math.max(0, Math.round(learningSteps)) + 1;
   return (Math.max(0, due) + Math.max(0, fresh) * views) * Math.max(MIN_CARD_MS, cardMs || 0);
 }
-// "~3 min", or "~1 h 20 min" from an hour up. `cards` is the whole queue; `fresh` of them are new.
+// "about 3 min", or "about 1 h 20 min" from an hour up. `cards` is the whole queue; `fresh` of them are new.
 export function minutesText(cards, cardMs, fresh = 0, learningSteps = 2) {
   const f = Math.min(Math.max(0, fresh), Math.max(0, cards));
   const min = Math.max(1, Math.round(sessionMs(cards - f, f, cardMs, learningSteps) / 60000));
-  if (min < 60) return `~${min} min`;
+  if (min < 60) return `about ${min} min`;
   const h = Math.floor(min / 60), m = min % 60;
-  return m ? `~${h} h ${m} min` : `~${h} h`;
+  return m ? `about ${h} h ${m} min` : `about ${h} h`;
 }
 
 // ---------- handing a session from Today to Review ----------

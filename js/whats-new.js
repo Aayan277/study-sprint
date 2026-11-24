@@ -8,6 +8,11 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.71', items: [
+    'Clearer headings, and the round ? help buttons now line up with their text.',
+    'On a computer: Settings has a side list, Play rounds fill the screen, and Review buttons show their shortcut when you point at them.',
+    'The time on Start now says “about 17 min” instead of “~17 min”.',
+  ] },
   { version: '4.70', items: [
     'The first run no longer asks for a course: try the Sample deck or add your own cards.',
     'On a computer, Decks shows one deck per row, with the menu always on the right.',
