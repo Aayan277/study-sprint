@@ -10,8 +10,8 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 export const NOTES = [
   { version: '4.70', items: [
     'Clearer headings, and the round ? help buttons now line up with their text.',
-    'On a computer: Settings has a section list at the side, Play rounds fill the screen like Review, and Review buttons show their shortcut.',
-    'Start on Today now says “about 17 min”.',
+    'On a computer: Settings has a side list, Play rounds fill the screen, and Review buttons show their shortcut when you point at them.',
+    'The time on Start now says “about 17 min” instead of “~17 min”.',
   ] },
   { version: '4.69', items: [
     'Course code and Exam date now say they are optional when you make or edit a deck.',
