@@ -1071,3 +1071,16 @@ test('Undo of a delete: the restored row is newer than the delete marker, so eve
   // the delete marker that was waiting to be sent is removed by the restore, so it is never sent after the card
   assert.equal(tombstoneNeedsPush({ ...marker, synced: true }, 0), false);
 });
+
+// ---------- Recently deleted: a restored row beats the delete marker ----------
+test('a restored row is newer than its delete marker: it wins on every device and is the one that is sent', () => {
+  const deletedAt = 5000;
+  // another device already has the delete: its local copy is gone and it keeps the delete marker
+  const restored = { store: 'cards', id: 'c1', deleted: false, updated_at: deletedAt + 1 };
+  assert.equal(decide(restored, deletedAt), 'put');
+  // a restore stamped no later than the delete would lose (this is what rule 5 prevents)
+  assert.equal(decide({ ...restored, updated_at: deletedAt }, deletedAt), 'skip');
+  // this device sends the delete marker and the restored row: only the restored row goes
+  const sent = newestOnly([{ store: 'cards', id: 'c1', deleted: true, updated_at: deletedAt }, restored]);
+  assert.deepEqual(sent.map(r => [r.deleted, r.updated_at]), [[false, deletedAt + 1]]);
+});
