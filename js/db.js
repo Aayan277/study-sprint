@@ -31,7 +31,6 @@ import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 import { validOcclusion, cleanAccept, cleanTypeIn } from './card-checks.js';
 import { validFields, cleanFields } from './note-fields.js';
 import { restoreRow, restoreStamp, hasPartner } from './trash-logic.js';
-import { unpaired, isPair } from './reverse.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { ui: 'original', skin: 'violet', mode: 'auto', oled: false }, // (a new install follows the device's light or dark setting; a saved choice is kept) ui: 'original' or 'clinical' (css/clinical.css); mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
@@ -460,10 +459,12 @@ export async function restoreSnapshot(snap) {
 // changed (a partner card, a moved subdeck) goes back only if nobody changed it since. Safe to run twice.
 //   part  { gone: {decks, cards, cardStates, reviewLog}, before: {decks, cards} }
 //   entry the entry (settledAt)
-//   ctx   { partners: Map noteId -> Set of card ids that will exist: a paired card with no other card on its note comes back ordinary }
+//   ctx   { partners: Map noteId -> Set of card ids that will exist, isPair(card), unpaired(card) (from reverse.js): a paired card with
+//         no other card on its note comes back as an ordinary card }
 // Returns counts: { decks, cards, states, reviews, newer (rows left because another device changed them), noDeck }.
 export async function restoreDeleted(part, entry, ctx = {}) {
   const partners = ctx.partners || new Map();
+  const isPair = ctx.isPair || (() => false), unpaired = ctx.unpaired || (c => c);
   const db = await openDB();
   const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
   const now = Date.now();

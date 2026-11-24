@@ -14,7 +14,7 @@ import { plainText } from './format.js';
 import { isPair, unpaired } from './reverse.js';
 import { partnerOf, pairsFor } from './confusion.js';
 import { savedTooBigNote } from './quota.js';
-import { keepDeleted, forgetDeleted } from './trash.js';
+import { keepDeleted, forgetDeleted } from './trash-lazy.js';
 import { MAX_PARTS, splitBack, splitCards, unleeched, parked, canSplit, withoutLeechTag, forgottenText } from './leech-logic.js';
 
 // After a card of a pair is deleted, its partner is an ordinary card again.

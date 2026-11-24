@@ -34,11 +34,12 @@ import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
 import { contactHTML, legalLinksHTML } from './legal.js';
 import { helpLink } from './help.js';
-import { emptyAll as emptyRecentlyDeleted } from './trash.js';
 import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 
 
 // ---------- settings ----------
+// Recently deleted goes when this device is wiped (loaded only then).
+const emptyRecentlyDeleted = async () => { try { await (await import('./trash.js')).emptyAll(); } catch (err) { console.error(err); } };
 // Settings redrawn in place go into the screen's .view box (its width and padding come from that box: see styles.css).
 // null when there is none: the redraw is skipped rather than drawn straight into #screen.
 // One "More settings" fold per section (same look as Advanced scheduling). Open or closed is remembered on this device.

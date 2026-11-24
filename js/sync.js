@@ -14,7 +14,7 @@
 // at, applied (changes received), sent, error }.
 
 import * as db from './db.js';
-import { protectedMedia } from './trash.js';
+import { protectedMedia } from './trash-db.js';
 import { lastStatus, setStatus, account } from './sync-state.js';
 import * as supa from './supa.js';
 import { planSweep, markKey, GONE, droppedRefs } from './media-sweep.js';

@@ -121,3 +121,8 @@ export async function mediaIds(opts = {}) {
   for (const e of await listEntries(opts)) for (const id of e.mediaIds || []) used.add(id);
   return used;
 }
+
+// For the clean-up and the account sweep: the ids to leave alone, or null when the list can't be read (then they must not clean).
+export async function protectedMedia(opts = {}) {
+  try { return await mediaIds(opts); } catch (err) { console.error('Recently deleted:', err); return null; }
+}

@@ -10,7 +10,7 @@ import * as db from './db.js';
 import * as store from './trash-db.js';
 import { account } from './sync-state.js';
 import { plainText } from './format.js';
-import { isPair } from './reverse.js';
+import { isPair, unpaired } from './reverse.js';
 import { ownSynced } from './own-gate.js';
 import { buildEntry, cardsTitle, deckPath, deckFate, fixParent, KEEP_DAYS, DAY } from './trash-logic.js';
 
@@ -84,10 +84,7 @@ export async function purgeDaily({ now = Date.now(), force = false } = {}) {
   } catch (err) { console.error('Recently deleted:', err); return 0; }
 }
 
-// The pictures and sounds the clean-up and the account sweep must leave alone, or null if the list can't be read (then do not clean).
-export async function protectedMedia() {
-  try { return await store.mediaIds(); } catch (err) { console.error('Recently deleted:', err); return null; }
-}
+export { protectedMedia } from './trash-db.js';          // (kept in trash-db.js so sync.js can use it without loading all of this)
 
 // ---------- restoring ----------
 // Puts an entry back, piece by piece. Options:
@@ -150,7 +147,7 @@ export async function restoreEntry(id, { onProgress = () => {}, pickDeck = null,
       gone: { ...part.gone, decks: part.gone.decks.map(d => fixParent(d, fix)), cards: part.gone.cards.map(c => (deckMap.has(c.deckId) ? { ...c, deckId: deckMap.get(c.deckId) } : c)) },
       before: part.before
     };
-    const got = await db.restoreDeleted(ready, entry, { partners });
+    const got = await db.restoreDeleted(ready, entry, { partners, isPair, unpaired });
     for (const k of Object.keys(total)) total[k] += got[k] || 0;
     onProgress({ done: n + 1, total: entry.parts });
     await new Promise(r => setTimeout(r));          // let the screen draw between pieces

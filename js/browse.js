@@ -23,7 +23,7 @@ import { ancestors, subtreeIds, deckPath, deckChoices, effectiveDeck } from './d
 import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher, undoOpts } from './ui.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { go as navGo } from './nav.js';
-import { keepDeleted, forgetDeleted } from './trash.js';
+import { keepDeleted, forgetDeleted } from './trash-lazy.js';
 
 const factsMemo = new WeakMap();      // typeFacts per card object (a changed card is a new object)
 const factsOf = card => factsMemo.get(card) || (factsMemo.set(card, typeFacts(card)), factsMemo.get(card));

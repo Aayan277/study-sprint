@@ -16,7 +16,7 @@ import { leftOutNote, fetchMissingFor } from './lazy-media.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 import { summariesByDeck, ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
 import { go as navGo, up } from './nav.js';
-import { keepDeleted, forgetDeleted } from './trash.js';
+import { keepDeleted, forgetDeleted } from './trash-lazy.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
