@@ -85,9 +85,7 @@ Supabase's built-in email only reaches your own team and is very limited, so you
 
 On the repository `aayan277/study-sprint`.
 
-- [ ] **Settings → Secrets and variables → Actions → New repository secret**. Add these four (the values are never shown again, so keep them in your password manager):
-  - `SUPABASE_URL`
-  - `SUPABASE_ANON_KEY`
+- [ ] **Settings → Secrets and variables → Actions → New repository secret**. Add these two (the values are never shown again, so keep them in your password manager). The keep-awake job needs no secrets: it reads `js/sync-config.js`.
   - `SUPABASE_DB_URL`: the Session pooler address from Supabase (see [sync-setup.md step 8b](sync-setup.md#8b-back-up-the-database-github)). At first this uses your `postgres` password. The optional read-only login below replaces it.
   - `BACKUP_PASSPHRASE`: make up a long passphrase and store it in your password manager. **Without it, backups can't be opened.**
 - [ ] **Settings → Actions → General → Workflow permissions**: choose **Read repository contents and packages permissions**. Save.
