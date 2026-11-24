@@ -8,6 +8,11 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.70', items: [
+    'Clearer headings, and the round ? help buttons now line up with their text.',
+    'On a computer: Settings has a section list at the side, Play rounds fill the screen like Review, and Review buttons show their shortcut.',
+    'Start on Today now says “about 17 min”.',
+  ] },
   { version: '4.69', items: [
     'Course code and Exam date now say they are optional when you make or edit a deck.',
   ] },
