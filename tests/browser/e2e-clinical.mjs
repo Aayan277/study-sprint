@@ -212,12 +212,8 @@ async function audit(page, label) {
     ok(await page.evaluate(() => document.documentElement.dataset.ui === 'clinical'), `first run (${size} ${mode}) opens in Clinical`);
     await page.screenshot({ path: `${SP}/clinical-welcome-${size}-${mode}.png` });
     await audit(page, `first run ${size} ${mode}`);
-    // step through: name form, how to add cards
-    await page.click('#wlNext'); await page.waitForSelector('#wlForm');
-    await page.fill('#wlName', 'Cell Biology');
-    await page.screenshot({ path: `${SP}/clinical-welcome2-${size}-${mode}.png` });
-    await audit(page, `first run form ${size} ${mode}`);
-    await page.click('#wlForm button[type=submit]'); await page.waitForSelector('#wlSample');
+    // step through: how to add cards
+    await page.click('#wlNext'); await page.waitForSelector('#wlSample');
     await page.screenshot({ path: `${SP}/clinical-welcome3-${size}-${mode}.png` });
     await audit(page, `first run choices ${size} ${mode}`);
     await ctx.browser().close();

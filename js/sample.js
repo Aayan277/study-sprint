@@ -4,8 +4,8 @@
 import * as db from './db.js';
 
 export const SAMPLE_DECK = {
-  name: 'Intro to Psychology (sample)',
-  course: 'PSYC 101',
+  name: 'Sample deck',
+  course: '',
   color: '#3E63DD',
   cards: [
     ['Classical conditioning', 'Learning by pairing a neutral stimulus with one that already causes a response, until the neutral one causes it too (Pavlov’s dogs).'],

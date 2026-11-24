@@ -11,7 +11,7 @@ The current state and what's next. Keep this file short: history goes in [CHANGE
 - Each release adds a line to the top of CHANGELOG.md (the same words as its `js/whats-new.js` entry).
 - Day-to-day rules are in `CLAUDE.md` and the `release` skill (`.claude/skills/release`).
 
-## Where things stand (v4.68)
+## Where things stand (v4.70)
 
 - Live at https://aayan277.github.io/study-sprint/ (GitHub Pages, `main` branch root). Code is all rights reserved (`LICENSE`).
 - Flashcards with FSRS scheduling (FSRS-6 is the default and the fallback), Anki/CSV/Excel/PDF import, Play games, Practice test, exam planning, stats, optional sync (Supabase).

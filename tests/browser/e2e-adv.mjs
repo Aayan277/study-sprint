@@ -83,7 +83,7 @@ ok(await page.evaluate(() => document.getElementById('advanced').open), 'advance
 await page.evaluate(async () => { const db = await import('./js/db.js');
   await db.addDeckWithCards({ id: 'vocab', name: 'Spanish', color: '#46A758', created: Date.now() }, ['uno|one', 'dos|two', 'tres|three', 'cuatro|four', 'cinco|five'].map((p, i) => ({ id: 'v' + i, deckId: 'vocab', front: p.split('|')[0], back: p.split('|')[1], tags: [], created: i }))); });
 await page.goto('http://localhost:8123/#/play'); await page.waitForSelector('#pDeck');
-const sampleId = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name.includes('Psychology')).id);
+const sampleId = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.id === 'sample').id);
 await page.selectOption('#pDeck', sampleId);
 ok(await page.isChecked('input[name=qtype][value=back]'), 'psychology deck (long backs) starts on Back → front');
 await page.screenshot({ path: SP + '/adv-play.png', fullPage: true });

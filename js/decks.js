@@ -137,14 +137,15 @@ export async function renderLibrary(el) {
           <span class="deck-counts">
             ${stats.total ? `<span><b>${stats.total.toLocaleString('en')}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
             <span class="due${c.due ? "" : " zero"}"><b>${c.due.toLocaleString('en')}</b> due</span>
-            <span><b>${c.fresh.toLocaleString('en')}</b> new</span>` : '<span>No cards yet</span>'}
+            <span><b>${c.fresh.toLocaleString('en')}</b> new</span>
+            <span class="deck-mastered"><b>${Math.round(learned * 100)}%</b> mastered</span>` : '<span>No cards yet</span>'}
             ${view.hits?.get(deck.id) ? `<span class="hit"><b>${view.hits.get(deck.id).toLocaleString('en')}</b> matching</span>` : ''}
           </span>
         </button>
         ${stats.total ? `<span class="deck-ring" role="img" aria-label="${Math.round(learned * 100)}% learned">${ring(learned, 44, 4, `<span class="mono">${Math.round(learned * 100)}<small>%</small></span>`)}</span>` : ''}
         <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
         <div class="deck-act">
-          ${!stats.total ? `<a class="${compact ? 'deck-go add' : 'btn ghost small'}" href="#/import/${esc(deck.id)}">+ Add cards</a>`
+          ${!stats.total ? `<a class="${compact ? 'deck-go add add-cards-btn' : 'btn ghost small'}" href="#/import/${esc(deck.id)}">+ Add cards</a>`
           : compact
             ? (go ? `<button class="deck-go${first ? ' lead' : ''}" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}" title="Study ${plural(go, 'card')}">${icon('play')}</button>`
                   : `<span class="deck-go done" role="img" aria-label="Done for today" title="Done for today">${icon('check')}</span>`)

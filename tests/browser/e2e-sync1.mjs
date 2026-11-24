@@ -47,7 +47,7 @@ ok(r.cards.length === 2 && r.cards.every(c => c.updatedAt === c.created && c.fro
 ok(r.state.stability === 3 && r.state.updatedAt === 5000, 'schedule kept, updatedAt = last review');
 ok(r.logs.length === 2 && r.logs.every(l => l.uid && l.updatedAt === l.timestamp) && r.logs[0].uid !== r.logs[1].uid && r.logs[0].id === 1, 'review history kept, each with its own uid');
 ok(r.settings.newPerDay === 15 && r.settings.seeded === true, 'settings kept');
-ok((await page.textContent('.deck')).includes('Old deck') && !(await page.textContent('#screen')).includes('Intro to Psychology'), 'app shows the old deck, no sample added');
+ok((await page.textContent('.deck')).includes('Old deck') && !(await page.textContent('#screen')).includes('Sample deck'), 'app shows the old deck, no sample added');
 
 // ---- 2. every save is stamped, every delete leaves a marker ----
 r = await page.evaluate(async () => {

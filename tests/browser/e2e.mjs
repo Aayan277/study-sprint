@@ -60,7 +60,7 @@ await page.click('[data-tab=decks]'); await page.waitForSelector('.deck'); await
 // reset
 await page.click('[data-tab=settings]'); await page.click('#dangerZone > summary'); await page.click('#resetBtn'); await page.click('#rsYes');
 await page.waitForSelector('.deck');
-ok((await page.locator('.deck').count()) === 1 && (await page.locator('.deck-name').first().innerText()).includes('sample') && await page.evaluate(() => document.documentElement.dataset.skin === 'rose'), 'reset: data wiped, sample back, theme kept');
+ok((await page.locator('.deck').count()) === 1 && (await page.locator('.deck-name').first().innerText()).includes('Sample deck') && await page.evaluate(() => document.documentElement.dataset.skin === 'rose'), 'reset: data wiped, sample back, theme kept');
 // all 5 themes x light/dark: screenshot sanity
 for (const skin of ['violet','ocean','forest','ember','rose']) { await page.evaluate(async s => { const t = await import('./js/themes.js'); t.applyTheme({ skin: s, mode: 'light' }); }, skin); }
 // old theme names move to the new ones (the light/dark choice is kept), and OLED black works

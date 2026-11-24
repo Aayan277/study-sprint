@@ -162,7 +162,7 @@ let chips = await p.$$eval('#xdDeck option', o => o.map(x => x.value));
 ok([...chips].sort().join() === 'econ,law,span,zed', 'the Deck dropdown offers courses with cards and no exam (not the one with an exam, the empty one, or subdecks): ' + chips.join());
 ok(chips[0] === 'law' && await p.inputValue('#xdDeck') === 'law', 'largest first, and the first is preselected');
 const optText = await p.$eval('#xdDeck', e => e.textContent);
-ok(!optText.includes('Cell Biology') && !optText.includes('sample'), 'and not for Cell Biology or the sample deck');
+ok(!optText.includes('Cell Biology') && !optText.includes('Sample deck'), 'and not for Cell Biology or the sample deck');
 await p.click('.sheet-x'); await p.waitForFunction(() => !document.getElementById('sheet').open);
 let taps = 0;
 await p.click('#addExamBtn'); taps++; await p.waitForSelector('#xdForm');
@@ -331,13 +331,26 @@ await p.reload(); await p.waitForSelector('#deckGrid .deck');
 // ---------- B4 on a computer: tiles keep their own height ----------
 const tiles = () => p.$$eval('#deckGrid > .deck', d => d.map(x => { const r = x.getBoundingClientRect(); return { y: Math.round(r.y), h: Math.round(r.height) }; }));
 let t = await tiles(); const row1 = t.filter(x => x.y === t[0].y);
-ok(row1.length >= 3, 'three tiles in a row at 1440: ' + row1.length);
-const rowMates = await p.evaluate(() => { const ds = [...document.querySelectorAll('#deckGrid > .deck')].map(d => { const r = d.getBoundingClientRect(); return { y: Math.round(r.y), h: Math.round(r.height) }; }); const byRow = {}; for (const d of ds) (byRow[d.y] ||= []).push(d.h); return Object.values(byRow).some(hs => new Set(hs).size > 1); });
-ok(rowMates, 'in at least one row, tiles of different heights sit side by side');
+ok(row1.length === 1, 'Original on a computer: one deck per row at 1440: ' + row1.length);
+ok(await p.evaluate(() => { const g = document.querySelector('#deckGrid').getBoundingClientRect(); return [...document.querySelectorAll('#deckGrid > .deck')].every(d => Math.abs(d.getBoundingClientRect().width - g.width) < 2); }), 'the rows are the full width of the list');
 await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('compactDecks', false); });
 await p.reload(); await p.waitForSelector('#deckGrid .deck');
 ok(await p.evaluate(() => { const byRow = {}; for (const d of document.querySelectorAll('#deckGrid > .deck')) { const r = d.getBoundingClientRect(); (byRow[Math.round(r.y)] ||= []).push(Math.round(r.height)); } return Object.values(byRow).every(hs => new Set(hs).size === 1); }), 'off: tiles in a row all stretch to the same height, as before');
 await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('compactDecks', true); });
+
+// ---------- the "mastered" number is for Original on a computer only; the ring stays everywhere else ----------
+for (const [label, w, h, clinical] of [['Original at 390', 390, 844, false], ['Clinical at 1440', 1440, 900, true]]) {
+  const o = await open(w, h);
+  await o.p.goto('http://localhost:8123/#/decks'); await o.p.waitForSelector('.deck');
+  await seed(o.p);
+  if (clinical) await o.p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('theme', { ui: 'clinical', skin: 'violet', mode: 'light', oled: false }); });
+  await o.p.reload(); await o.p.waitForSelector('#deckGrid .deck');
+  const row = await o.p.evaluate(() => { const r = document.querySelector('[data-open="bio"]').closest('.deck'); const vis = s => { const e = r.querySelector(s); return !!e && getComputedStyle(e).display !== 'none'; }; return { ui: document.documentElement.dataset.ui, mastered: vis('.deck-mastered'), ring: vis('.deck-ring') }; });
+  ok((row.ui === 'clinical') === clinical, label + ': the right style is on: ' + row.ui);
+  ok(!row.mastered, label + ': ".deck-mastered" is not shown');
+  ok(row.ring, label + ': the ring is shown on the deck row');
+  await o.ctx.close();
+}
 
 // ---------- B7: three columns ----------
 await go(p, '#/deck/law', '.crow');
