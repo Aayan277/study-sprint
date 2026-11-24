@@ -3418,3 +3418,18 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) main[data-route="decks"] .decks.compact .deck .add-cards-btn{min-height:36px}
   :root:not([data-ui="clinical"]) main[data-route="decks"] .decks.compact .deck .add-cards-btn:hover{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--text)}
 }
+
+/* ---------- Recently deleted sheet (js/trash-sheet.js) ---------- */
+.tr-list{list-style:none;margin:var(--s-3) 0 0;padding:0;display:grid;gap:var(--s-3)}
+.tr-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s-2) var(--s-3);align-items:start;padding:var(--s-3) var(--s-4);background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md);min-width:0}
+.tr-ico{display:grid;place-items:center;width:32px;height:32px;border-radius:var(--r-sm);background:var(--surface-2);color:var(--text-2)}
+.tr-main{display:grid;gap:2px;min-width:0}
+.tr-title{font-weight:600;overflow-wrap:anywhere}
+.tr-meta{font-size:var(--fs-sm);color:var(--text-2)}
+.tr-acts{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.tr-box{grid-column:1 / -1}
+.tr-box:empty,#trBox:empty{display:none}
+.tr-box .confirm p,#trBox .confirm p{margin:0;font-size:var(--fs-sm)}
+.tr-box .confirm .sheet-actions,#trBox .confirm .sheet-actions{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.tr-prog{margin:0;font-size:var(--fs-sm);color:var(--text-2)}
+.tr-none{list-style:none}

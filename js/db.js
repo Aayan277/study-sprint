@@ -30,6 +30,8 @@ import { dayStart, dayEnd } from './days.js';
 import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 import { validOcclusion, cleanAccept, cleanTypeIn } from './card-checks.js';
 import { validFields, cleanFields } from './note-fields.js';
+import { restoreRow, restoreStamp, hasPartner } from './trash-logic.js';
+import { unpaired, isPair } from './reverse.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { ui: 'original', skin: 'violet', mode: 'auto', oled: false }, // (a new install follows the device's light or dark setting; a saved choice is kept) ui: 'original' or 'clinical' (css/clinical.css); mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
@@ -413,36 +415,117 @@ let mediaHeldUntil = 0;
 export const holdMedia = (ms = 120000) => { mediaHeldUntil = Math.max(mediaHeldUntil, Date.now() + ms); };
 
 // Put a snapshot back. A card whose deck is gone (and not in the snapshot) is left out. Returns how many cards came back.
+// Rows are saved with a time later than their delete marker (restoreStamp, rule 5 of the Recently deleted plan), so a clock that went
+// back after the delete cannot make the delete win again.
 export async function restoreSnapshot(snap) {
   const db = await openDB();
   const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
   const now = Date.now();
   let cardsBack = 0;
   await inTx(tx, async () => {
-    const stampBack = (name, row, at) => { const { syncedAt, ...rest } = row; return stamp(name, { ...rest }, at); };
+    // The delete markers of everything in the snapshot, read in one go (the same time stamp for every row: later than the latest marker).
+    const keys = [...snap.decks.map(d => tombstoneKey('decks', d.id)), ...snap.cards.map(c => tombstoneKey('cards', c.id)),
+      ...snap.cardStates.map(s => tombstoneKey('cardStates', s.cardId)), ...snap.reviewLog.filter(l => l.uid).map(l => tombstoneKey('reviewLog', l.uid))];
+    const tombs = await Promise.all(keys.map(k => done(tx.objectStore('deleted').get(k))));
+    const at = tombs.reduce((t, m) => restoreStamp(t, m), now);
+    const stampBack = (name, row) => { const { syncedAt, ...rest } = row; return stamp(name, { ...rest }, at); };
     const tomb = (name, id) => tx.objectStore('deleted').delete(tombstoneKey(name, id));
-    for (const d of snap.decks) { tx.objectStore('decks').put(stampBack('decks', d, now)); tomb('decks', d.id); }
+    for (const d of snap.decks) { tx.objectStore('decks').put(stampBack('decks', d)); tomb('decks', d.id); }
     const backDecks = new Set(snap.decks.map(d => d.id));
     const ok = new Set();
     for (const c of snap.cards) {
       const deckOk = !c.deckId || backDecks.has(c.deckId) || await done(tx.objectStore('decks').getKey(c.deckId)) !== undefined;
       if (!deckOk) continue;
       ok.add(c.id);
-      tx.objectStore('cards').put(stampBack('cards', c, now)); tomb('cards', c.id);
+      tx.objectStore('cards').put(stampBack('cards', c)); tomb('cards', c.id);
       cardsBack++;
     }
     for (const st of snap.cardStates) {
       if (!ok.has(st.cardId) && !(await done(tx.objectStore('cards').getKey(st.cardId)))) continue;
-      tx.objectStore('cardStates').put(stampBack('cardStates', st, now)); tomb('cardStates', st.cardId);
+      tx.objectStore('cardStates').put(stampBack('cardStates', st)); tomb('cardStates', st.cardId);
     }
     for (const l of snap.reviewLog) {
       if (!ok.has(l.cardId) && !(await done(tx.objectStore('cards').getKey(l.cardId)))) continue;
-      tx.objectStore('reviewLog').put(stampBack('reviewLog', l, now)); if (l.uid) tomb('reviewLog', l.uid);
+      tx.objectStore('reviewLog').put(stampBack('reviewLog', l)); if (l.uid) tomb('reviewLog', l.uid);
     }
   });
   scheduleChanges++;
   changed();
   return cardsBack;
+}
+
+// Put back one piece of a Recently deleted entry (js/trash.js calls this piece by piece; each piece is one save). The rules are in
+// js/trash-logic.js restoreRow (1-4) and restoreStamp (5); in short: a row that exists here now, or that another device deleted or
+// changed again since, is left alone; schedules and reviews only come back with their card; the saved copy of a row that was only
+// changed (a partner card, a moved subdeck) goes back only if nobody changed it since. Safe to run twice.
+//   part  { gone: {decks, cards, cardStates, reviewLog}, before: {decks, cards} }
+//   entry the entry (settledAt)
+//   ctx   { partners: Map noteId -> Set of card ids that will exist: a paired card with no other card on its note comes back ordinary }
+// Returns counts: { decks, cards, states, reviews, newer (rows left because another device changed them), noDeck }.
+export async function restoreDeleted(part, entry, ctx = {}) {
+  const partners = ctx.partners || new Map();
+  const db = await openDB();
+  const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
+  const out = { decks: 0, cards: 0, states: 0, reviews: 0, newer: 0, noDeck: 0 };
+  await inTx(tx, async () => {
+    const del = tx.objectStore('deleted');
+    const side = (r, name) => (name === 'cardStates' ? r.cardId : name === 'reviewLog' ? r.uid : r.id);
+    // What this device has now for each row, and its delete marker, all asked at once (one request per row, none awaited in turn).
+    const find = (name, rows) => Promise.all(rows.map(async row => {
+      const os = tx.objectStore(name), key = side(row, name);
+      const [live, tomb] = await Promise.all([
+        key == null ? undefined : done(name === 'reviewLog' ? os.index('uid').get(key) : os.get(key)),
+        key == null ? undefined : done(del.get(tombstoneKey(name, key)))
+      ]);
+      return { row, live, tomb };
+    }));
+    const back = (name, row, tomb, notBefore = 0) => {
+      const { syncedAt, ...rest } = row;
+      tx.objectStore(name).put(stamp(name, rest, restoreStamp(Math.max(now, notBefore), tomb)));
+      if (tomb) del.delete(tomb.key);
+    };
+    // 4: rows the delete only changed (a partner card, a moved subdeck) go back if nobody changed them since.
+    for (const name of ['decks', 'cards']) {
+      for (const { row, live } of await find(name, part.before?.[name] || [])) {
+        if (restoreRow({ kind: 'before', live, entry }) !== 'put') { if (live) out.newer++; continue; }
+        back(name, row, null, (live.updatedAt || 0) + 1);
+        if (name === 'cards' && isPair(row)) (partners.get(row.noteId) || partners.set(row.noteId, new Set()).get(row.noteId)).add(row.id);
+      }
+    }
+    // The decks, then the cards that need them.
+    const decksHere = new Set();
+    for (const { row, live, tomb } of await find('decks', part.gone.decks)) {
+      const r = restoreRow({ live, tomb, entry });
+      if (r === 'put') { back('decks', row, tomb); decksHere.add(row.id); out.decks++; } else if (r === 'newer') out.newer++;
+    }
+    const deckKnown = new Map();
+    const hasDeck = async id => decksHere.has(id) || (deckKnown.has(id) ? deckKnown.get(id) : deckKnown.set(id, (await done(tx.objectStore('decks').getKey(id))) !== undefined).get(id));
+    const cardsHere = new Set();
+    for (const { row, live, tomb } of await find('cards', part.gone.cards)) {
+      const r = restoreRow({ live, tomb, entry, needsDeck: !row.deckId || await hasDeck(row.deckId) });
+      if (r === 'live') { cardsHere.add(row.id); continue; }                      // it is here already: its schedule and history can still come back
+      if (r === 'newer') { out.newer++; continue; }
+      if (r === 'no-deck') { out.noDeck++; continue; }
+      // A card whose partner is not coming back too is an ordinary card again (rule 4).
+      back('cards', isPair(row) && !hasPartner(row, partners) ? unpaired(row) : row, tomb);
+      cardsHere.add(row.id); out.cards++;
+    }
+    // Schedules and reviews: only when their card is here (rule 3), so a card that came back by sync without its history gets it back.
+    const cardKnown = new Map();
+    const hasCard = async id => cardsHere.has(id) || (cardKnown.has(id) ? cardKnown.get(id) : cardKnown.set(id, (await done(tx.objectStore('cards').getKey(id))) !== undefined).get(id));
+    for (const { row, live, tomb } of await find('cardStates', part.gone.cardStates)) {
+      const r = restoreRow({ live, tomb, entry, needsCard: await hasCard(row.cardId) });
+      if (r === 'put') { back('cardStates', row, tomb); out.states++; } else if (r === 'newer') out.newer++;
+    }
+    for (const { row, live, tomb } of await find('reviewLog', part.gone.reviewLog)) {
+      const r = restoreRow({ live, tomb, entry, needsCard: await hasCard(row.cardId) });
+      if (r === 'put') { back('reviewLog', row, tomb); out.reviews++; } else if (r === 'newer') out.newer++;
+    }
+  });
+  if (out.cards || out.states || out.decks) scheduleChanges++;
+  if (out.decks || out.cards || out.states || out.reviews) changed();
+  return out;
 }
 
 // Delete one card with its schedule and every review-log row, leaving deleted markers. Inside a transaction
@@ -1360,7 +1443,8 @@ export async function discardMedia(ids) {
 }
 // Remove pictures and sounds no card uses any more (replaced, removed, or their card deleted). Ones added in the
 // last hour are kept (their card may not be saved yet). Returns the removed ones that the server has.
-export async function cleanMedia(now = Date.now()) {
+// keep: ids to leave alone besides the ones cards use (the pictures of cards in Recently deleted, see js/trash.js).
+export async function cleanMedia(now = Date.now(), { keep = null } = {}) {
   if (Date.now() < mediaHeldUntil) return [];          // a delete can still be undone (holdMedia)
   const db = await openDB();
   const tx = db.transaction(['cards', 'media', 'settings'], 'readwrite');
@@ -1368,7 +1452,7 @@ export async function cleanMedia(now = Date.now()) {
   await inTx(tx, async () => {
     const used = usedMediaIds(await done(tx.objectStore('cards').getAll()));
     // Only the ids are listed; the files nothing uses are looked at one by one (to check their age), the rest are never read.
-    const unused = (await done(tx.objectStore('media').getAllKeys())).filter(id => !used.has(id));
+    const unused = (await done(tx.objectStore('media').getAllKeys())).filter(id => !used.has(id) && !(keep && keep.has(id)));
     for (const id of unused) {
       const m = await done(tx.objectStore('media').get(id));
       if (!m || now - (m.created || 0) < 3600000) continue;

@@ -16,6 +16,7 @@ import { leftOutNote, fetchMissingFor } from './lazy-media.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 import { summariesByDeck, ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
 import { go as navGo, up } from './nav.js';
+import { keepDeleted, forgetDeleted } from './trash.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -717,11 +718,14 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       } catch { toast('Could not save a copy'); }
     });
     // Undo puts back every deck, card, schedule and review that the delete removed, and any subdeck that was moved up (db.restoreSnapshot).
-    const done = snap => {
+    // It is also kept in Recently deleted (js/trash.js); `moved` are the subdecks that were only moved up (kept apart as "before" rows).
+    const done = async (snap, moved = []) => {
       closeSheet();
       db.holdMedia();
+      const kept = await keepDeleted(snap, { kind: 'deck', title: deck.name, deckId: deck.id, before: { decks: moved } });
       toast(`Deleted “${deck.name}”`, undoOpts(async () => {
         await db.restoreSnapshot(snap);
+        await forgetDeleted(kept);
         toast(`Restored “${deck.name}”`);
         drawSidebar();
         navGo(`#/deck/${deck.id}`);          // (the screen that opened the editor may be gone by now: show the deck itself)
@@ -731,14 +735,14 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     $('delYes').addEventListener('click', async () => {
       const snaps = [];
       for (const id of tree) snaps.push(await db.deleteDeck(id));
-      done(db.mergeSnapshots(...snaps));
+      await done(db.mergeSnapshots(...snaps));
     });
     $('delKeep')?.addEventListener('click', async () => {
       const moved = decks.filter(x => x.parentId === deck.id);
       for (const d of moved) await db.saveDeck({ ...d, parentId: deck.parentId || '' });
       const snap = await db.deleteDeck(deck.id);
       snap.decks.push(...moved);          // the subdecks as they were, so Undo puts them back inside
-      done(snap);
+      await done(snap, moved);
     });
   });
 }

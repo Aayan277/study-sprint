@@ -14,6 +14,7 @@
 // at, applied (changes received), sent, error }.
 
 import * as db from './db.js';
+import { protectedMedia } from './trash.js';
 import { lastStatus, setStatus, account } from './sync-state.js';
 import * as supa from './supa.js';
 import { planSweep, markKey, GONE, droppedRefs } from './media-sweep.js';
@@ -544,16 +545,20 @@ async function syncMedia(auth, person, savedBackoff) {
   });
   // Pictures and sounds no card uses any more: remove them here, and mark them for deletion from the account; the account's copy
   // goes 30 days later if still unused (media-sweep.js), in case another device still needs it.
-  const removed = await db.cleanMedia();
-  await sweepMedia(token, uid, removed, cards);
+  // Pictures and sounds of cards in Recently deleted stay for 30 days (js/trash.js). If that list can't be read, skip this tidy-up.
+  const inTrash = await protectedMedia();
+  if (inTrash) {
+    const removed = await db.cleanMedia(Date.now(), { keep: inTrash });
+    await sweepMedia(token, uid, removed, cards, inTrash);
+  }
   if (gate.full) return fullMessage(gate.full);
   if (gate.note) return gate.note;
   return blockedKinds.picture ? PICTURES_BLOCKED_NOTE : blockedKinds.sound ? SOUNDS_BLOCKED_NOTE : null;
 }
-async function sweepMedia(token, uid, removed, cards) {
+async function sweepMedia(token, uid, removed, cards, inTrash = new Set()) {
   const { marks, gone } = await db.mediaMarks();
   // Files a card used last time and none does now, that this device never held (lazy loading): marked too, or the account would only grow.
-  const used = db.usedMediaIds(cards);
+  const used = new Set([...db.usedMediaIds(cards), ...inTrash]);          // (a file a trashed card uses is "used": un-marked, re-uploaded if the account lost it)
   const dropped = droppedRefs({ prev: (await db.getSettings()).mediaRefs, used, userId: uid });
   removed = [...new Set([...removed, ...dropped])];
   const plan = planSweep({ marks, gone, removed, used, held: new Set(await db.mediaKeys()), now: Date.now() });
