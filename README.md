@@ -1,25 +1,25 @@
 # Study Sprint ⚡
 
-A mobile-first flashcard app for university courses. It combines real spaced repetition (FSRS-6, like modern Anki) with timed game rounds for cramming, and your game answers feed the review schedule automatically.
+Free flashcards that come back right before you forget. Study Sprint is a mobile-first flashcard app that combines real spaced repetition (FSRS-6, like modern Anki) with timed game rounds, and your game answers feed the review schedule automatically. Any subject, any deck.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.png">
-    <img src="docs/hero.png" width="100%" alt="Study Sprint: Today, Review and Play on three phones, above the line “Free flashcards that remember your exam date”">
+    <img src="docs/hero.png" width="100%" alt="Study Sprint: the headline “Flashcards that come back right before you forget” above screenshots of Today, Review and Play">
   </picture>
 </p>
 
-<p align="center"><b>Free flashcards that remember your exam date.</b><br>
+<p align="center"><b>Flashcards that come back right before you forget.</b><br>
 Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, works offline.</p>
 
 <p align="center"><a href="https://aayan277.github.io/study-sprint/"><b>Open the app →</b></a></p>
 
 <p align="center">
-  <img src="docs/screenshots/today.png" width="150" alt="Today: a ring for today's work, one Start button and upcoming exams">
+  <img src="docs/screenshots/today.png" width="150" alt="Today: a ring for today's work, one Start button and a list of decks with due and new counts">
   <img src="docs/screenshots/review.png" width="150" alt="Review: a flipped card with Again, Hard, Good and Easy and the next interval on each">
   <img src="docs/screenshots/play.png" width="150" alt="Play: timed rounds, Classic, Survival and Lightning">
   <img src="docs/screenshots/stats.png" width="150" alt="Stats: streak, retention and a study calendar">
-  <img src="docs/screenshots/decks.png" width="150" alt="Decks: courses with due and new counts and exam badges">
+  <img src="docs/screenshots/decks.png" width="150" alt="Decks: a list of decks with due, card and new counts and a mastery ring">
   <img src="docs/screenshots/import.png" width="150" alt="Import: pasted notes turned into cards, with a preview">
 </p>
 
@@ -37,10 +37,10 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
 ## Headline features
 
 - **Spaced repetition that fits your day.** One Start button on Today for everything due, with a time estimate from your own pace.
-- **Exam date mode.** Give a course an exam date and every card comes back before it; Exam prep goes over what you haven't seen lately.
+- **Exam dates, if you want them.** Give a deck an exam date and every card comes back before it; Exam prep goes over what you haven't seen lately.
 - **Timed game rounds.** Classic, Survival and Lightning rounds for cramming, and right answers on due cards count as reviews.
 - **Paste notes, get cards.** Paste almost any format, or import .apkg, Quizlet, CSV, Excel, PDFs and PowerPoint slides, and check an editable preview first.
-- **Stats that mean something.** Retention, a year-long study calendar, hardest cards and a readiness ring for each course.
+- **Stats that mean something.** Retention, a year-long study calendar, hardest cards and a readiness ring for each deck.
 - **Yours.** Works offline, opens quickly even on slow phones, keeps your data on your device, syncs only if you sign in, and installs from the browser as a home-screen app.
 
 <details>
@@ -115,7 +115,7 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
   - **Time zones:** days are named in the time zone your device is in now (a day starts at 4am there). If you travel or change time zone, a day's boundary moves with it, so one day can look doubled or missed around the change; the freeze usually absorbs that.
 - **Settings:** Appearance, Study, Sync and Your data, with buttons at the top that jump to each section and highlight the one you're in.
 - **Backups:** export everything to one file and restore it on any device (Settings → Your data).
-- **First run:** a fresh install opens on a landing-style welcome screen (a mini card with the four rating intervals; two columns on a computer), then a short, skippable start: name your course, add cards (the sample cards come first, or paste, or a file), and a guided review of 3 cards that ends by showing when each card comes back. It never shows again (Today's "How it works" link re-opens it), and existing users never see it. An empty Today offers Paste notes, Try sample cards and How it works.
+- **First run:** a fresh install opens on a landing-style welcome screen (a mini card with the four rating intervals; two columns on a computer), then a short, skippable start: add cards (the sample cards come first, or paste, or a file), and a guided review of 3 cards that ends by showing when each card comes back. It never shows again (Today's "How it works" link re-opens it), and existing users never see it. An empty Today offers Paste notes, Try sample cards and How it works.
 - **Install card:** after your first finished Review session, Today offers to install the app (Install / Not now on Android and desktop, Add to Home Screen steps on iPhone Safari). It is remembered per device, hidden once the app is installed, and Settings has an Install app row.
 - **Themes:** 5 accent colors (Violet, Ocean, Forest, Ember, Rose), each in dark or light (it follows your device until you choose), plus an OLED black option. Settings → Appearance → Style also offers **Clinical**, a plainer, more professional look with its own accent names and no animations. Fonts are Geist and Geist Mono (monospace only for numbers and key hints).
 - **Appearance** (Settings → Appearance, this device only; none of these sync):
@@ -202,6 +202,7 @@ Smaller modules, such as the practice test, Suggest cards and Suggest tags, say 
 | `js/streak-sheet.js` | The "Your streak" sheet: the freeze explained, the last 7 days, planning and removing days off |
 | `js/themes.js`, `js/sample.js`, `js/ui.js` | Themes, the sample deck, shared helpers |
 | `tests/browser/readme-shots.mjs` | Makes the README and manifest screenshots in `docs/screenshots/` from the real app |
+| `tests/browser/promo-images.mjs` | Makes `docs/hero.png`, `docs/hero-light.png` and the link-preview picture `icons/og-1200x630.png` from those screenshots |
 | `tests/*.test.js` | Tests for every rule above that doesn't need a browser |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and installing as an app |
 
@@ -238,7 +239,7 @@ Branches that are worked on side by side don't bump `sw.js`; do one bump when th
 If the look of the app changed, also run `node tests/browser/readme-shots.mjs`: it remakes the screenshots in `docs/screenshots/`
 (Today, Review, Play, Stats, Decks, Import and a computer shot) from the real app in Violet Dark. The README and the manifest
 (`screenshots`) use them, so they never go stale. The pictures at the top of the README (`docs/hero.png` and `docs/hero-light.png`)
-and the link-preview image (`icons/og-1200x630.png`) are designed pictures: redo them only when the headline changes.
+and the link-preview image (`icons/og-1200x630.png`) are made from those screenshots by `node tests/browser/promo-images.mjs`: run it after `readme-shots.mjs`, or when the headline changes.
 
 ## Running the tests
 

@@ -1,7 +1,7 @@
 {
   "name": "Study Sprint",
   "short_name": "Study Sprint",
-  "description": "Free flashcards with real spaced repetition, exam dates and timed game rounds. Works offline, no account.",
+  "description": "Free flashcards that come back right before you forget. Spaced repetition, timed games, works offline, no account.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
@@ -102,14 +102,14 @@
       "sizes": "750x1624",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Today: one Start button for everything due"
+      "label": "Today: your decks and one Start button for what is due"
     },
     {
       "src": "docs/screenshots/review.png",
       "sizes": "750x1624",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Review with spaced repetition"
+      "label": "Review: flip a card, then rate it Again, Hard, Good or Easy"
     },
     {
       "src": "docs/screenshots/play.png",
@@ -123,7 +123,7 @@
       "sizes": "1440x900",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Study Sprint on a computer"
+      "label": "Study Sprint on a computer: Today with your decks"
     }
   ]
 }
