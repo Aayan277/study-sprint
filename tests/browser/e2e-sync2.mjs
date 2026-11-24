@@ -65,7 +65,7 @@ ok(true, 'creating the same account twice explained');
 await B.click('#syncForm button[type=submit]');
 await waitSynced(B);
 let b = await snapshot(B);
-ok(b.decks.join('|') === 'Biology|Chemistry|Intro to Psychology (sample)', 'B merged: both devices\' decks, one sample deck: ' + b.decks.join('|'));
+ok(b.decks.join('|') === 'Biology|Chemistry|Sample deck', 'B merged: both devices\' decks, one sample deck: ' + b.decks.join('|'));
 ok(Object.keys(b.cards).length === 16 && b.states['bio-0']?.stability === 2 && b.logs.length === 1, 'B got the cards, schedule and review history');
 ok(b.settings.newPerDay === 30 && b.settings.theme.skin === 'violet', 'B got newPerDay, kept its own theme');
 await B.waitForFunction(() => document.querySelector('#npd')?.value === '30');
@@ -93,7 +93,7 @@ await run(A, async () => (await import('./js/db.js')).deleteCards(['bio-2']));
 await run(A, async () => (await import('./js/db.js')).deleteDeck('sample'));
 await syncNow(A); await syncNow(B);
 b = await snapshot(B);
-ok(!b.cards['bio-2'] && !b.decks.includes('Intro to Psychology (sample)') && !Object.keys(b.cards).some(id => id.startsWith('sample-')), 'deletes on A reach B (a card, and the sample deck with its cards)');
+ok(!b.cards['bio-2'] && !b.decks.includes('Sample deck') && !Object.keys(b.cards).some(id => id.startsWith('sample-')), 'deletes on A reach B (a card, and the sample deck with its cards)');
 
 // ---- reviews, undo and settings ----
 const undone = await run(B, async () => {
@@ -153,7 +153,7 @@ ok(!fake.log.some(l => false) && !errors.some(e => e.includes('cannot affect row
 const C = await device('C');
 await signInUI(C); await waitSynced(C);
 const c = await snapshot(C);
-ok(c.decks.join() === b.decks.join() && !c.decks.includes('Intro to Psychology (sample)'), 'a new device gets everything, and its fresh sample deck loses to the delete: ' + c.decks.join('|'));
+ok(c.decks.join() === b.decks.join() && !c.decks.includes('Sample deck'), 'a new device gets everything, and its fresh sample deck loses to the delete: ' + c.decks.join('|'));
 ok(c.logs.length === a.logs.length && c.settings.leechThreshold === 5, 'history and settings too');
 
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');

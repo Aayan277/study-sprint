@@ -58,7 +58,7 @@ export async function addDailyReminder(time) {
 // decks are already loaded (Settings has them), so nothing is awaited before the Share sheet opens.
 export async function addExams(decks) {
   const text = examsICS({ decks, url: appUrl() });
-  if (!text) { toast('No exam dates yet. Set one on a course first.'); return 'none'; }
+  if (!text) { toast('No exam dates yet. Set one on a deck first.'); return 'none'; }
   const out = await saveCalendar(text, 'study-sprint-exams.ics', 'Study Sprint exam dates');
   if (out === 'saved') toast('Calendar file saved. Open it to add your exams.');
   return out;
