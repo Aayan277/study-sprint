@@ -53,8 +53,8 @@ await page.evaluate(() => { location.hash = '#/decks'; }); await page.waitForSel
 ok(!(await focusOn()), 'focus mode is off after leaving a round');
 
 // Resume banner, then old #/review link
-await page.click('.tab[data-tab=today]'); await page.waitForSelector('#resumeBtn');
-ok(/\d+ cards? left/.test(await page.textContent('.resume')) && (await page.getAttribute('#resumeBtn', 'href')).startsWith('#/review/'), 'Today offers Resume with the cards left: ' + (await page.textContent('.resume')).replace(/\s+/g, ' ').trim());
+await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn[data-resume]');
+ok(/Resume · \d+ left/.test(await page.textContent('#startBtn')) && (await page.getAttribute('#startBtn', 'href')).startsWith('#/review/') && await page.locator('.resume').count() === 0, 'the one Start button turns into Resume with the cards left: ' + (await page.textContent('#startBtn')).replace(/\s+/g, ' ').trim());
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 await page.goto('http://localhost:8123/#/review'); await page.waitForFunction(() => history.state?.k === 'ov'); await page.reload(); await page.waitForSelector('.today-hero');   // (a reload: no session in memory)
 ok(page.url().endsWith('#/today'), '#/review with nothing started goes to Today');

@@ -98,9 +98,6 @@ export async function renderToday(el) {
       </div>
       ${!data.cards.length && !data.hiddenCount ? emptyStartHTML({ courseId: top.filter(d => d.id !== 'sample').length === 1 ? top.filter(d => d.id !== 'sample')[0].id : '' })
       : `
-      ${resume ? `<div class="resume">
-        <span>${icon('clock')} Session in progress · ${plural(resume.left, 'card')} left</span>
-        <a class="btn small primary" id="resumeBtn" href="#/review${resume.deckId ? '/' + encodeURIComponent(resume.deckId) : ''}">Resume</a></div>` : ''}
       <section class="today-hero" aria-label="Today's work">
         <div class="th-main">
           ${ring(tr.frac, 84, 8, tr.state !== 'todo' ? icon('check', 'ring-check') : `<b class="mono">${tr.done}</b><small class="mono">/${tr.total}</small>`)}
@@ -111,7 +108,9 @@ export async function renderToday(el) {
           </div>
         </div>
         ${streakHTML(streak, { button: true })}
-        ${tr.state === 'todo'
+        ${resume
+          ? `<a class="btn primary wide big" id="startBtn" data-resume href="#/review${resume.deckId ? '/' + encodeURIComponent(resume.deckId) : ''}" aria-label="Resume · ${plural(resume.left, 'card')} left">${icon('play')} Resume · ${resume.left.toLocaleString('en')} left</a>` : ''}
+        ${resume ? '' : tr.state === 'todo'
           ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
           : `<div class="th-done">
               <p>Nothing is due right now. ${[nextDueText(data, c.cards), data.hiddenCount ? `${data.hiddenCount.toLocaleString('en')} hidden` : ''].filter(Boolean).join(' · ')}</p>
@@ -288,7 +287,7 @@ export async function renderToday(el) {
       el.querySelectorAll('[data-rdays]').forEach(x => x.setAttribute('aria-pressed', x === b));
       $('rbPre').textContent = `~${Math.ceil(rescue.offer.backlog / rescueDays)} overdue + ${rescue.offer.typical} usual a day`;
     }));
-    $('startBtn')?.addEventListener('click', () => launch({ deckIds: chosen }));
+    if (!$('startBtn')?.hasAttribute('data-resume')) $('startBtn')?.addEventListener('click', () => launch({ deckIds: chosen }));
     $('optBtn')?.addEventListener('click', () => openOptions());
     // The streak opens "Your streak": the freeze, the last 7 days and planned days off (loaded when first needed).
     $('streakBtn')?.addEventListener('click', async () => (await import('./streak-sheet.js')).openStreakSheet({ onChange: () => renderToday(el), returnFocus: 'streakBtn' }));

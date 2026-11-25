@@ -93,7 +93,6 @@
 :root[data-ui="clinical"] .ring-fg{filter:none}
 :root[data-ui="clinical"] .ring-bg{stroke:var(--surface-3)}
 :root[data-ui="clinical"] .streak.kept .ico{filter:none}
-:root[data-ui="clinical"] .resume{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}
 /* Deck color: a small dot before the name instead of a glowing edge stripe */
 :root[data-ui="clinical"] :is(.deck,.tdeck,.exam-row,.deck-summary)::before{display:none}
 :root[data-ui="clinical"] :is(.td-name,.deck-name)::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--deck);margin-right:8px;vertical-align:1px}

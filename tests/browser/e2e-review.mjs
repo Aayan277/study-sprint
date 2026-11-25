@@ -104,9 +104,9 @@ ok(easy && easy.due - Date.now() > 3 * 86400000, 'Easy card scheduled days ahead
 await page.evaluate(() => { location.hash = '#/decks'; }); await page.waitForSelector('.deck');   // the tab bar is hidden during a round on phones
 const dueText = await page.textContent('.deck-counts .due');
 ok(dueText.includes('1'), 'deck list shows the learning card as due today: ' + dueText);
-await page.click('.tab[data-tab=today]'); await page.waitForSelector('#resumeBtn');
-ok((await page.textContent('.resume')).includes('left'), 'Today offers to resume the session: ' + (await page.textContent('.resume')).replace(/\s+/g, ' ').trim());
-await page.click('#resumeBtn'); await page.waitForSelector('#flash');
+await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn[data-resume]');
+ok((await page.textContent('#startBtn')).includes('left'), 'Today offers to#startBtn the session: ' + (await page.textContent('#startBtn')).replace(/\s+/g, ' ').trim());
+await page.click('#startBtn[data-resume]'); await page.waitForSelector('#flash');
 ok(JSON.stringify(await counts()) === '[10,1,0]', 'session resumes after visiting another tab');
 // end
 await page.click('#endBtn'); await page.waitForSelector('.stats4');

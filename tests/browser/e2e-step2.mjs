@@ -86,7 +86,7 @@ const firstFront = await page.textContent('.flash-front');
 await page.click('#showBtn'); await page.click('[data-rate="3"]'); await page.waitForFunction(() => document.querySelector('#undoBtn') && !document.querySelector('#undoBtn').disabled);
 const left = await counts();
 await goToday();
-ok(await page.locator('.resume').count() === 1, 'Today shows the session in progress');
+ok(await page.locator('#startBtn[data-resume]').count() === 1, 'Today shows the session in progress');
 await page.click('#startBtn');
 await page.waitForSelector('#flash');
 ok(await page.locator('#soNew').count() === 0 && (await counts()) === left && !(await page.$eval('#undoBtn', b => b.disabled)), 'Start with the same decks carries on with that session (undo still there)');
