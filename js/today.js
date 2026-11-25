@@ -22,7 +22,8 @@ import { drawPrompt as drawRemindPrompt, stepAside as stepAsideRemind } from './
 import { openExamSheet } from './exam-sheet.js';
 import * as fx from './fx.js';
 import { drawSidebar } from './sidebar.js';
-import { go as navGo } from './nav.js';
+import { go as navGo, routeName } from './nav.js';
+import { singleKeysOn } from './shortcuts.js';
 
 // Start a study session (see launchStudy in study-data.js), with two things first:
 //   - if a session is in progress, Start carries on with it when it covers the same decks, and otherwise asks,
@@ -109,9 +110,9 @@ export async function renderToday(el) {
         </div>
         ${streakHTML(streak, { button: true })}
         ${resume
-          ? `<a class="btn primary wide big" id="startBtn" data-resume href="#/review${resume.deckId ? '/' + encodeURIComponent(resume.deckId) : ''}" aria-label="Resume · ${plural(resume.left, 'card')} left">${icon('play')} Resume · ${resume.left.toLocaleString('en')} left</a>` : ''}
+          ? `<a class="btn primary wide big" id="startBtn" data-resume data-hint="Resume the session" data-hint-key="Enter" href="#/review${resume.deckId ? '/' + encodeURIComponent(resume.deckId) : ''}" aria-label="Resume · ${plural(resume.left, 'card')} left">${icon('play')} Resume · ${resume.left.toLocaleString('en')} left</a>` : ''}
         ${resume ? '' : tr.state === 'todo'
-          ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
+          ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" data-hint="Start studying" data-hint-key="Enter" aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
           : `<div class="th-done">
               <p>Nothing is due right now. ${[nextDueText(data, c.cards), data.hiddenCount ? `${data.hiddenCount.toLocaleString('en')} hidden` : ''].filter(Boolean).join(' · ')}</p>
               <button class="btn ghost th-extra" type="button" id="customLink">Extra study</button></div>`}
@@ -434,6 +435,22 @@ export async function renderToday(el) {
   }
 
   draw();
+  // On a computer: Enter (or S, with the single-key shortcuts on) starts or resumes studying, when focus is not on a control or in a text field.
+  // It goes away by itself once this screen has been replaced.
+  const onKey = e => {
+    if (!el.isConnected) { document.removeEventListener('keydown', onKey); return; }
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
+    if (e.key !== 'Enter' && !(singleKeysOn() && e.key.toLowerCase() === 's')) return;
+    if (e.target.closest?.('input, textarea, select, button, a, summary, [contenteditable], [role=button], [role=menuitem], [role=tab], [role=switch]')) return;
+    if (document.getElementById('sheet')?.open || document.body.classList.contains('focus') || routeName(location.hash) !== 'today') return;
+    const b = $('startBtn');
+    if (!b) return;
+    e.preventDefault();
+    b.click();
+  };
+  el._stopKey?.();                // (a redraw of this screen must not leave a second listener behind)
+  document.addEventListener('keydown', onKey);
+  el._stopKey = () => document.removeEventListener('keydown', onKey);
   // The browser may announce that the app can be installed a moment after this screen is drawn, or the card may be closed.
   const onInstall = () => { if (el.isConnected) { if ($('whatsNewSlot')?.firstChild || $('ownNoticeSlot')?.firstChild) return; drawInstallCard($('installSlot')); stepAsideRemind($('remindSlot')); } else window.removeEventListener('install-change', onInstall); };
   window.addEventListener('install-change', onInstall);
