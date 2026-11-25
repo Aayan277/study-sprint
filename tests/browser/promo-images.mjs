@@ -16,7 +16,7 @@ import { realChromium as chromium } from './pw.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SHOTS = path.join(ROOT, 'docs/screenshots');
-const HEADLINE = 'Flashcards that come back right before you forget.';
+const HEADLINE = 'Study less. Remember more.';
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'promo-'));
 const LIGHT = path.join(TMP, 'light');
 execFileSync(process.execPath, [path.join(ROOT, 'tests/browser/readme-shots.mjs')], { env: { ...process.env, SHOTS_MODE: 'light', SHOTS_OUT: LIGHT }, stdio: 'inherit' });
@@ -54,7 +54,7 @@ const og = (t, dir) => page(t, `
 <img class="shot ph" src="${url(path.join(dir, 'today.png'))}">`, `
 body{width:1200px;height:630px}
 .brand{position:absolute;left:72px;top:64px;font-size:30px}.brand svg{width:44px;height:44px}
-h1{position:absolute;left:72px;top:190px;width:560px;font-size:56px}
+h1{position:absolute;left:72px;top:230px;width:640px;font-size:76px}
 .ph{left:760px;top:64px;width:310px;height:640px;object-fit:cover;object-position:top}`);
 
 const browser = await chromium.launch();

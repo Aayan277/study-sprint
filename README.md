@@ -5,11 +5,11 @@ Free flashcards that come back right before you forget. Study Sprint is a mobile
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.png">
-    <img src="docs/hero.png" width="100%" alt="Study Sprint: the headline “Flashcards that come back right before you forget” above screenshots of Today, Review and Play">
+    <img src="docs/hero.png" width="100%" alt="Study Sprint: the headline “Study less. Remember more.” above screenshots of Today, Review and Play">
   </picture>
 </p>
 
-<p align="center"><b>Flashcards that come back right before you forget.</b><br>
+<p align="center"><b>Study less. Remember more.</b><br>
 Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, works offline.</p>
 
 <p align="center"><a href="https://aayan277.github.io/study-sprint/"><b>Open the app →</b></a></p>

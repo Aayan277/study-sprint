@@ -77,7 +77,7 @@ function drawPitch(el, api) {
       <div class="wl-top"><span class="brand">${MARK} Study Sprint</span><button class="link" type="button" id="wlSkip">Skip</button></div>
       <div class="lp-grid">
         <div class="lp-copy">
-          <h1 tabindex="-1">Flashcards that come back right before you forget.</h1>
+          <h1 tabindex="-1">Study less. Remember more.</h1>
           <div class="lp-demo lp-phone-only">${demoHTML()}</div>
           <ul class="lp-points">
             <li>${icon('clock')}<span><b>A few minutes a day.</b> The app picks what to review.</span></li>
