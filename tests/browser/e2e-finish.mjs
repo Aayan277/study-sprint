@@ -43,7 +43,7 @@ ok(keep.match(/(\d+) cards/)[1] === badge, 'Keep going N equals the sidebar badg
 ok(await p.$eval('#keepBtn', b => b.classList.contains('primary')) && await p.$eval('#againBtn', b => b.classList.contains('ghost')), 'Keep going is the primary button, Back to Today is ghost');
 ok((await p.textContent('h1')).trim() === 'Session ended', 'ended early: the title says "Session ended"');
 ok(!(await p.textContent('main')).includes('Nothing due tomorrow') && !(await p.locator('.fn-line:has(.ico-calendar), .fn-line:has-text("due tomorrow")').count()), 'no calendar line, and never "Nothing due tomorrow"');
-ok(await p.locator('.fin-links a[href="#/decks"]').count() === 1 && await p.locator('.fin-links #undoLast').count() === 1, 'links row: Decks and Undo last');
+ok(await p.locator('.fin-links a[href="#/decks"]').count() === 0 && await p.locator('.fin-links #undoLast').count() === 1, 'links row: just Undo last (the Decks link is gone)');
 ok(await p.locator('#finishMore').count() === 1 && await p.evaluate(() => { const m = document.querySelector('#finishMore'); return m.previousElementSibling?.compareDocumentPosition(m) & 4 && m.nextElementSibling?.classList.contains('finish-next'); }), '#finishMore sits before .finish-next, after the stats');
 // v4.9: the game is only on the Play page, so the finish screen no longer offers a round
 ok(await p.locator('#screen a[href="#/play"]').count() === 0 && !(await p.textContent('#screen')).includes('Play a round'), 'no Play link on the finish screen');
@@ -71,7 +71,7 @@ await answerOne(p);
 await p.waitForSelector('.finish-next');
 ok(await p.locator('#keepBtn').count() === 0 && await p.$eval('#againBtn', b => b.classList.contains('primary')), 'nothing left: Back to Today is the primary and there is no Keep going');
 ok((await p.textContent('h1')).trim() === 'Nice work', 'reviewed and nothing left: "Nice work"');
-ok((await p.textContent('.stats4')).includes('Due tomorrow') && !(await p.textContent('main')).includes('Nothing due tomorrow'), 'Due tomorrow appears once, in the stats');
+ok((await p.textContent('.fin-line')).includes('due tomorrow') && !(await p.textContent('main')).includes('Nothing due tomorrow'), 'Due tomorrow appears once, in the summary line');
 ok(await p.locator('#undoLast').count() === 1, 'Undo last is in the links row');
 const rows = await p.$$eval('.res-actions > *', els => new Set(els.map(e => Math.round(e.getBoundingClientRect().top))).size);
 ok(rows <= 2, 'at most 2 button rows at 375: ' + rows);

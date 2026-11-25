@@ -203,13 +203,13 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   await go(p, '#/review/A', '#flash');
   await p.keyboard.press('Space'); await p.waitForSelector('.rate'); await p.keyboard.press('1');       // Again: it comes back
   await p.waitForFunction(() => document.querySelector('.rv-front .flash-front')?.textContent !== 'A front 0' || document.querySelectorAll('.rv-face:not([inert]) .rate').length === 0);
-  for (let i = 0; i < 12 && !(await p.locator('.stats4').count()); i++) {
+  for (let i = 0; i < 12 && !(await p.locator('.fin-line').count()); i++) {
     await p.keyboard.press('Space'); await p.waitForSelector('.rate').catch(() => {});
     if (await p.locator('.rate').count()) await p.keyboard.press('3');
     await p.waitForTimeout(150);
   }
-  await p.waitForSelector('.stats4');
-  const done = await p.$$eval('.stats4 > div', d => d.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+  await p.waitForSelector('.fin-line');
+  const done = [(await p.textContent('.fin-line')).trim()];
   const answers = await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.source === 'review' && l.cardId.startsWith('a')).length);
   ok(done[0].startsWith('3') && answers > 3, `the finish screen counts cards (3), not answers (${answers}): ${done[0]}`);
   ok((await norm(p, '.note')).includes(`${answers} answers on 3 cards`), `and says "${answers} answers on 3 cards": ` + (await norm(p, '.note')));
@@ -220,7 +220,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   await go(p, '#/review/B', '#flash');
   await p.keyboard.press('Space'); await p.waitForSelector('.rate'); await p.keyboard.press('3');
   await p.waitForFunction(() => !!document.querySelector('#undoBtn'));
-  await p.click('#endBtn'); await p.waitForSelector('.stats4');
+  await p.click('#endBtn'); await p.waitForSelector('.fin-line');
   const keep = await norm(p, '#keepBtn');
   const counts = await p.evaluate(async () => { const sd = await import('./js/study-data.js'); const d = await sd.loadAll(); return [sd.countFor(d, ['B']).total, sd.countFor(d, d.decks.map(x => x.id)).total]; });
   ok(counts[0] < counts[1] && keep === `Keep going · ${counts[0]} cards`, `"Keep going" counts Deck B (${counts[0]}), not every deck (${counts[1]}): ${keep}`);

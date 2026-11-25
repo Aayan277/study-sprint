@@ -128,8 +128,8 @@ ok(await page.evaluate(() => [...document.querySelectorAll('.rv-back .occ-mask:n
 await page.keyboard.press('m');
 ok((await page.locator('.rv-back .occ-peek').getAttribute('aria-pressed')) === 'false', 'M toggles it back');
 // rating ends the session (one sibling a day)
-await page.keyboard.press('4'); await page.waitForSelector('.stats4');
-ok((await page.textContent('.stats4')).includes('1'), 'rated: the other two siblings wait for tomorrow');
+await page.keyboard.press('4'); await page.waitForSelector('.fin-line');
+ok((await page.textContent('.fin-line')).includes('1'), 'rated: the other two siblings wait for tomorrow');
 
 // typed answers only for labelled boxes
 await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewTyping', true); });

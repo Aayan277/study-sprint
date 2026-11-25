@@ -32,9 +32,9 @@ const rateAll = async (p, n, key = '3') => {
     await p.keyboard.press('Space');
     await p.waitForSelector('#flash.flipped');
     await p.keyboard.press(key);
-    await p.waitForFunction(() => document.querySelector('.stats4') || !document.querySelector('#flash.flipped'));
+    await p.waitForFunction(() => document.querySelector('.fin-line') || !document.querySelector('#flash.flipped'));
   }
-  await p.waitForSelector('.stats4');
+  await p.waitForSelector('.fin-line');
 };
 const setSetting = (p, k, v) => p.evaluate(([k, v]) => import('./js/db.js').then(m => m.setSetting(k, v)), [k, v]);
 const fxNodes = p => p.evaluate(() => document.querySelectorAll('.fx-ghost,.fx-ring,.fx-ivl,canvas.fx-confetti').length);
@@ -117,7 +117,7 @@ await nextCard(p, () => p.keyboard.press('3'));
 ok((await fxNodes(p)) === 0, 'reduced motion: no ring, interval or outline');
 await rateAll(p, 11);
 ok(await p.evaluate(() => !document.querySelector('.fx-count,.fx-in,.fx-ignite,canvas.fx-confetti,.fx-glow-h1')), 'reduced motion: the finish screen shows final numbers at once, no count-up, flame animation or confetti');
-ok((await p.$$eval('.stats4 .v', v => v.map(x => x.textContent))).join() !== '' && await p.evaluate(() => !document.querySelector('[data-n]')), 'and there is no ticking number');
+ok((await p.textContent('.fin-line')).trim() !== '' && await p.evaluate(() => !document.querySelector('[data-n]')), 'and there is no ticking number');
 ok(await p.evaluate(() => { const i = document.querySelector('.rv-prog i'); return !i || getComputedStyle(i).transitionDuration === '0s'; }), 'the progress bar changes without a transition');
 await p.context().close();
 
@@ -126,10 +126,9 @@ p = await open();
 await deck(p, 'b', 6); await deck(p, 'c', 6); await deck(p, 'd', 3); await deck(p, 'e', 6);
 await startDeck(p, 'b');
 await rateAll(p, 6);
-ok(await p.evaluate(() => [...document.querySelectorAll('.stats4 .v')].some(v => v.classList.contains('fx-count') && v.dataset.n !== undefined)), 'the numbers count up (the ticking value is drawn from data-n)');
 ok(await confettiSeen(p), 'confetti plays when a whole queue of 5+ cards is finished');
-const live = await p.evaluate(() => { const v = document.querySelector('.stats4 .v'); return { text: v.textContent, aria: !!v.closest('[aria-live]') }; });
-ok(live.text === '6' && !live.aria, 'the real text is already final and the number is not in a live region: ' + live.text);
+const live = await p.evaluate(() => { const v = document.querySelector('.fin-line'); return { text: v.textContent, aria: !!v.closest('[aria-live]') }; });
+ok(/^6 cards/.test(live.text) && !live.aria, 'the one-line summary is plain final text, not in a live region: ' + live.text);
 await until(p, () => !document.querySelector('.fx-count,[data-n]'));
 ok(await p.evaluate(() => !document.querySelector('.fx-count,[data-n]')), 'every count-up finishes and leaves nothing behind');
 await until(p, () => !document.querySelector('canvas.fx-confetti'));
@@ -141,7 +140,7 @@ ok(!(await confettiSeen(p)), 'a queue under 5 cards never has confetti');
 await p.evaluate(() => localStorage.setItem('study-sprint-fx-burst', 'Mon Jan 01 2001'));
 await startDeck(p, 'e'); await p.keyboard.press('Space'); await p.waitForSelector('#flash.flipped');
 await nextCard(p, () => p.keyboard.press('3'));
-await p.click('#endBtn'); await p.waitForSelector('.stats4');
+await p.click('#endBtn'); await p.waitForSelector('.fin-line');
 ok(!(await confettiSeen(p)), 'ending early never has confetti');
 await p.context().close();
 

@@ -109,10 +109,10 @@ ok((await page.textContent('#startBtn')).includes('left'), 'Today offers to#star
 await page.click('#startBtn[data-resume]'); await page.waitForSelector('#flash');
 ok(JSON.stringify(await counts()) === '[10,1,0]', 'session resumes after visiting another tab');
 // end
-await page.click('#endBtn'); await page.waitForSelector('.stats4');
-const stats = await page.$$eval('.stats4 .v', vs => vs.map(v => v.textContent));
+await page.click('#endBtn'); await page.waitForSelector('.fin-line');
+const stats = (await page.textContent('.fin-line')).split(' · ');
 console.log('   finish:', stats.join(' | '));
-ok(stats[0] === '2' && stats[1] === '50%', 'finish screen: 2 reviewed, 50% accuracy');
+ok(stats[0] === '2 cards' && stats[1] === '50% right', 'finish screen: 2 reviewed, 50% accuracy');
 ok(!(await focusOn()), 'focus mode is off on the finish screen');
 await page.screenshot({ path: SP + '/r-finish.png' });
 

@@ -70,9 +70,9 @@ const left = () => page.evaluate(() => [...document.querySelectorAll('.rv-counts
 const start = await left();
 ok(start === 5, 'Review has 5 cards to do, not 7: one of each sibling pair waits for tomorrow (' + start + ')');
 let answered = 0;
-for (let i = 0; i < 12 && !(await page.locator('.stats4').count()); i++) {
+for (let i = 0; i < 12 && !(await page.locator('.fin-line').count()); i++) {
   await page.keyboard.press('Space'); await page.waitForSelector('.rv-back:not([inert])'); await page.keyboard.press('4'); answered++;
-  await page.waitForFunction(() => document.querySelector('.stats4') || document.querySelector('.rv-front:not([inert])'), null, { timeout: 8000 });
+  await page.waitForFunction(() => document.querySelector('.fin-line') || document.querySelector('.rv-front:not([inert])'), null, { timeout: 8000 });
 }
 ok(answered === 5, 'the session ends after 5 answers: ' + answered);
 const today = await page.evaluate(async id => {

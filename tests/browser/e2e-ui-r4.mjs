@@ -108,13 +108,13 @@ for (const [label, viewport, touch] of [['PC 1440x900', PC, false], ['phone 390x
   if (phone) await p.tap('#showBtn'); else await p.keyboard.press('Space');
   await p.waitForSelector('.rate'); await p.click('.rate.r3');
   await p.waitForSelector('#endBtn'); await p.click('#endBtn'); await p.waitForSelector('.finish-next .streak');
-  const time = (await p.locator('.stats4 > div', { hasText: 'Time spent' }).locator('.v').textContent()).trim();
+  const time = (await p.textContent('.fin-line')).split(' · ')[2].trim();
   ok(time === '<1 min', label + ': finish: a short session says "<1 min", not 0:00 ("' + time + '")');
   const chip = await p.$eval('.finish-next .streak', e => ({ cls: e.className, pill: e.querySelectorAll('.frz-pill').length, text: e.textContent.replace(/\s+/g, ' ').trim() }));
   ok(chip.cls.includes('streak-chip') && /^\d+\s*day streak/.test(chip.text), label + ': finish: the same one-line streak chip as Today: ' + chip.text);
   ok(await p.$eval('.finish-next .streak', e => { const r = e.getBoundingClientRect(); return r.height <= 48 && getComputedStyle(e).borderTopWidth === '1px'; }), label + ': finish: the chip is one outlined line');
   ok(await p.locator('.finish-next .streak .frz-pill.used').count() === 1, label + ': finish: the snowflake shows because a freeze was used');
-  ok(await p.$eval('.fin-links .link', e => getComputedStyle(e).textDecorationLine === 'none'), label + ': finish: the links are not underlined');
+  ok(await p.locator('.fin-links .link').count() === 0 || await p.$eval('.fin-links .link', e => getComputedStyle(e).textDecorationLine === 'none'), label + ': finish: the links are not underlined');
   if (!phone) ok(await p.locator('.today-hero, .streak, .side-streak').evaluateAll(es => es.filter(e => e.offsetParent !== null).length) === 1, label + ': finish on a computer: one streak (the sidebar copy is hidden)');
   await noHScroll(p, label + ' finish');
   await p.close();

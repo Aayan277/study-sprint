@@ -68,7 +68,7 @@ await page.click('#optDone');
 await page.click('#startBtn'); await page.waitForSelector('#flash');
 ok((await page.textContent('.flash-deck')).includes('Second'), 'Start follows the chosen decks');
 await page.click('#endBtn'); await page.waitForSelector('.finish-next');
-ok((await page.textContent('.finish-next')).includes('day streak') && (await page.textContent('.stats4')).includes('Due tomorrow') && !(await page.textContent('#screen')).includes('Play a round'), 'finish shows streak and due tomorrow (in the stats), and no longer suggests Play (v4.9)');
+ok((await page.textContent('.finish-next')).includes('day streak') && (await page.textContent('.fin-line')).includes('due tomorrow') && !(await page.textContent('#screen')).includes('Play a round'), 'finish shows streak and due tomorrow (in the stats), and no longer suggests Play (v4.9)');
 ok(!(await focusOn()), 'focus mode is off on the finish screen');
 await page.screenshot({ path: SP + '/t-finish.png' });
 await page.click('#againBtn'); await page.waitForSelector('.today-hero');

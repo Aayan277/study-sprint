@@ -918,18 +918,13 @@ async function finish(el) {
   if (!R || !location.hash.startsWith('#/review')) return;
   if (reviewed) noteSession();            // a finished session: Today may now offer to install the app (install.js)
   const acc = reviewed ? Math.round((reviewed - again) / reviewed * 100) : 0;
-  // Under a minute reads "<1 min" (a clock showing 0:00 looks like nothing was timed); from a minute on it is m:ss.
-  const spentText = spent < 60000 ? '&lt;1 min' : `${Math.floor(spent / 60000)}:${String(Math.floor((spent % 60000) / 1000)).padStart(2, '0')}`;
+  // Under a minute reads "<1 min" (it would otherwise look like nothing was timed); from a minute on it is whole minutes.
+  const spentText = spent < 60000 ? '&lt;1 min' : `${Math.round(spent / 60000)} min`;
   const title = endedEarly ? 'Session ended' : reviewed && !rest.total ? 'Nice work' : 'Session done';
 
   el.innerHTML = `
     <div class="screen-head"><div><h1>${title}</h1></div></div>
-    <div class="stats4">
-      <div><div class="v">${cardsDone}</div><div class="l">Cards reviewed</div></div>
-      <div><div class="v">${acc}%</div><div class="l">Accuracy</div></div>
-      <div><div class="v">${spentText}</div><div class="l">Time spent</div></div>
-      <div><div class="v">${dueTomorrow}</div><div class="l">Due tomorrow</div></div>
-    </div>
+    <p class="fin-line">${[plural(cardsDone, 'card'), `${acc}% right`, spentText, `${dueTomorrow.toLocaleString('en')} due tomorrow`].join(' · ')}</p>
     <p class="fin-missed"><b>${missedIds.length} missed</b>${missedLeft ? ' <button class="btn ghost small" type="button" id="missedBtn">Go over these</button>' : ''}</p>
     ${reviewed > cardsDone ? `<p class="note">${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}.</p>` : ''}
     <div class="res-actions">
@@ -938,7 +933,7 @@ async function finish(el) {
            <button class="btn ghost" type="button" id="againBtn">Back to Today</button>`
         : '<button class="btn primary" type="button" id="againBtn">Back to Today</button>'}
     </div>
-    <p class="fin-links"><a class="link" href="#/decks">Decks</a>${R.undo.length ? '<span aria-hidden="true">·</span><button class="link" type="button" id="undoLast">Undo last</button>' : ''}</p>
+    ${R.undo.length ? '<p class="fin-links"><button class="link" type="button" id="undoLast">Undo last</button></p>' : ''}
     <div id="finishMore" class="finish-more" hidden></div>
     <section class="finish-next" aria-label="What's next">
       ${streakHTML(streak, { chip: true })}

@@ -164,8 +164,8 @@ ok((await page.textContent('.rv-back mark.cloze-ans')) === 'mitochondria' && (aw
 ok((await page.locator('.rv-back .flash-extra b').textContent()) === 'cell', 'back: the note\'s Extra is under it, formatted');
 ok(await page.locator('.rv-front').evaluate(e => e.inert) && !(await page.locator('.rv-back').evaluate(e => e.inert)), 'after the flip the faces swap (front inert, back live)');
 await page.waitForTimeout(700); await page.screenshot({ path: SP + '/cloze-review-back-375.png' });
-await page.keyboard.press('4'); await page.waitForSelector('.stats4');
-ok((await page.textContent('.stats4')).includes('1'), 'rating is instant; Easy graduates the card and the session ends after one card (the other 2 siblings wait for tomorrow)');
+await page.keyboard.press('4'); await page.waitForSelector('.fin-line');
+ok((await page.textContent('.fin-line')).includes('1'), 'rating is instant; Easy graduates the card and the session ends after one card (the other 2 siblings wait for tomorrow)');
 await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('.tdeck');
 ok(/\b0\s*due\s*0\s*new/s.test(await todayRow()) || (await page.locator(`a[href="#/deck/${bio}"]`).count()) === 1, 'Today now shows nothing left for the note');
 // Exam prep: every sibling that was not seen in the last 3 days

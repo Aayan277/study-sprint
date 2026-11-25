@@ -85,7 +85,7 @@ const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect();
   await p.click('#showBtn'); await p.click('.rate.r3'); await p.waitForFunction(() => !document.querySelector('.rate'));
   await p.click('#endBtn'); await p.waitForSelector('.fin-links');
   ok(await p.locator('#undoLast').count() === 1, '8: Undo last is on the finish screen');
-  for (const sel of ['.fin-links a.link', '.fin-links #undoLast']) { const b = await box(p, sel); ok(b.h >= 43.9, '8: ' + sel + ' is at least 44px tall (' + b.h + ')'); }
+  for (const sel of ['.fin-links #undoLast']) { const b = await box(p, sel); ok(b.h >= 43.9, '8: ' + sel + ' is at least 44px tall (' + b.h + ')'); }
   ok(await p.locator('#againBtn').count() === 1 && /Back to Today/.test(await p.textContent('#againBtn')), '8: "Back to Today" is still there');
   await p.close();
 }

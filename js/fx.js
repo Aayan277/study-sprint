@@ -202,16 +202,12 @@ export const confetti = safe('confetti', (x, y) => {
 
 // Called when Review's finish screen has been drawn.
 //   complete: the whole queue was finished (not "End" pressed early); reviewed: cards rated this session
-// Numbers count up; the streak flame ignites; a 7 / 30 / 100 day streak gets a pill the first time it is reached;
+// The streak flame ignites; a 7 / 30 / 100 day streak gets a pill the first time it is reached;
 // and confetti plays when the whole queue is done with 5 or more cards, at most once a day (a new milestone bypasses
 // that daily limit, once).
 export const finished = safe('finished', (view, { complete, reviewed }) => {
-  const stats = view.querySelector('.stats4');
+  const stats = view.querySelector('.fin-line');
   const moving = !reduced();
-  if (moving && stats) {
-    stats.classList.add('fx-in');
-    stats.querySelectorAll('.v').forEach((v, i) => countUp(v, 650, 80 + i * 50));
-  }
   const streak = view.querySelector('.finish-next .streak.kept');
   let milestone = false;
   if (streak) {
