@@ -1,4 +1,4 @@
-// Single-key shortcuts (E, I, R, D, Z, A, X, M, -, @, 1-6, Space/Enter on the page). WCAG 2.1.4 (Character Key Shortcuts) asks for a
+// Single-key shortcuts (E, I, R, D, Z, A, X, M, S on Today, -, @, 1-6, Space/Enter on the page). WCAG 2.1.4 (Character Key Shortcuts) asks for a
 // way to turn them off, because speech-input and some switch users trigger them by accident. Settings → Study → "Single-key shortcuts"
 // controls it. It is a per-device setting (not synced): it depends on how this device is used (a keyboard, voice control), not on the person's
 // study plan. Shortcuts with Ctrl/Cmd (Ctrl+Enter to save) are not affected.

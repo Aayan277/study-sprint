@@ -977,6 +977,7 @@ document.addEventListener('keydown', e => {
   if (!R?.active || !document.getElementById('flash') || document.getElementById('sheet')?.open) return;
   if (document.querySelector('dialog.occ-view[open], dialog.occ-ed[open]')) return;      // the zoom viewer and the box editor have their own keys
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.repeat && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); return; }      // a key held down (e.g. the Enter that started this session) must not flip or rate cards (preventDefault: nor press the focused Show answer button again and again)
   if (e.target.closest?.('.gl-pop')) return;      // a glossary popover has its own keys (Escape, Space and Enter close it)
   const inInput = e.target.matches('input, textarea, select');
   if (e.key === 'Escape' && e.target.id === 'typeIn') { e.preventDefault(); e.target.blur(); return; }      // out of the answer box: the single keys work again

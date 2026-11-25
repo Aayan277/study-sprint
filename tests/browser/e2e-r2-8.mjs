@@ -39,5 +39,16 @@ await p.evaluate(() => document.activeElement?.blur()); await p.keyboard.press('
 ok(await p.locator('#flash').count() === 0, 'with single-key shortcuts off, S does nothing');
 await p.keyboard.press('Enter'); await p.waitForSelector('#flash');
 ok(true, 'and Enter still starts');
+// holding Enter on Today must not rate cards in the session it starts
+await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('singleKeys', true); (await import('./js/shortcuts.js')).configureShortcuts({ singleKeys: true }); });
+await p.goto(URL + '#/today'); await p.reload(); await p.waitForSelector('#startBtn');
+await p.evaluate(() => document.activeElement?.blur());
+const logsBefore = await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length);
+for (let i = 0; i < 25; i++) { await p.keyboard.down('Enter'); await p.waitForTimeout(40); }
+await p.keyboard.up('Enter');
+await p.waitForTimeout(300);
+const logsAfter = await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length);
+ok(logsAfter === logsBefore, `holding Enter for a second wrote no review logs (${logsBefore} -> ${logsAfter})`);
+ok(await p.locator('#flash').count() === 1 && await p.locator('#flash.flipped').count() === 0, 'and the first card is still waiting, not flipped');
 ok(errors.length === 0, 'no page errors: ' + errors.join('|'));
 await browser.close();

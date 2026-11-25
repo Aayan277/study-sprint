@@ -112,7 +112,7 @@ export async function renderToday(el) {
         ${resume
           ? `<a class="btn primary wide big" id="startBtn" data-resume data-hint="Resume the session" data-hint-key="Enter" href="#/review${resume.deckId ? '/' + encodeURIComponent(resume.deckId) : ''}" aria-label="Resume · ${plural(resume.left, 'card')} left">${icon('play')} Resume · ${resume.left.toLocaleString('en')} left</a>` : ''}
         ${resume ? '' : tr.state === 'todo'
-          ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" data-hint="Start studying" data-hint-key="Enter" aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
+          ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" data-hint="Start studying" data-hint-key="Enter"${singleKeysOn() ? ' aria-keyshortcuts="Enter S"' : ''} aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
           : `<div class="th-done">
               <p>Nothing is due right now. ${[nextDueText(data, c.cards), data.hiddenCount ? `${data.hiddenCount.toLocaleString('en')} hidden` : ''].filter(Boolean).join(' · ')}</p>
               <button class="btn ghost th-extra" type="button" id="customLink">Extra study</button></div>`}
