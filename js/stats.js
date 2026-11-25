@@ -102,10 +102,13 @@ async function loadRetentionLogs(logs) {
   return (await logs.older()).concat(logs.recent);
 }
 const RS_PERIODS = [7, 30, 90];
+// Retention vs target shows one window at a time (a small 7d / 30d / 90d switch, 30d to start); the choice is kept on this device.
+const RS_KEY = 'study-sprint-rs-window';
+const savedRsWindow = () => { try { const v = +localStorage.getItem(RS_KEY); return RS_PERIODS.includes(v) ? v : 30; } catch { return 30; } };
 const RS_MIN = 0.5;       // the scale of the dots runs from 50% to 100%
 const rsPos = v => +((Math.min(1, Math.max(RS_MIN, v)) - RS_MIN) / (1 - RS_MIN)).toFixed(4);   // 0 to 1 along the track; the CSS keeps it inside the track's ends
 const RS_MARK = { on: '✓', under: '▼', over: '▲' };
-function retSplitHTML(res, hasLogs) {
+function retSplitHTML(res, hasLogs, win = 30) {
   if (!hasLogs) return '<p class="muted">Nothing due in the last 90 days yet.</p>';
   const rowHTML = (label, b, target) => {
     if (!b.n) return `<div class="rs-row"><span class="rs-name">${label}</span><span class="rs-track" aria-hidden="true"></span><span class="rs-val muted">No reviews</span></div>`;
@@ -118,10 +121,10 @@ function retSplitHTML(res, hasLogs) {
       <span class="rs-track" aria-hidden="true"><i class="rs-dot ${kind}" style="--p:${rsPos(rate)}"></i>${Number.isFinite(target) ? `<i class="rs-target" style="--p:${rsPos(target)}"></i>` : ''}</span>
       <span class="rs-val"><b class="mono">${Math.round(rate * 100)}%</b> <small>of ${b.n}</small>${word ? ` <span class="rs-gap ${kind}"><span aria-hidden="true">${RS_MARK[kind]}</span> ${word}</span>` : ''}</span></div>`;
   };
-  return RS_PERIODS.map(d => {
+  return [win].map(d => {
     const r = res[d];
     return `<div class="rs-group" role="group" aria-label="Last ${d} days">
-      <div class="rs-head"><b>Last ${d} days</b><span class="muted small">${d === RS_PERIODS[0] && Number.isFinite(r.target) ? `target ${Math.round(r.target * 100)}%` : ''}</span></div>
+      <div class="rs-head"><b>Last ${d} days</b><span class="muted small">${Number.isFinite(r.target) ? `target ${Math.round(r.target * 100)}%` : ''}</span></div>
       ${rowHTML(`Young <small>(&lt;${YOUNG_DAYS}d)</small>`, r.young, r.target)}
       ${rowHTML(`Mature <small>(${YOUNG_DAYS}d+)</small>`, r.mature, r.target)}
     </div>`;
@@ -388,7 +391,8 @@ export async function renderStats(el) {
       </div>`,
     rs: () => `
     <section class="card section rs-card" aria-labelledby="rsTitle">
-      <div class="mhead"><h2 id="rsTitle">Retention vs target</h2></div>
+      <div class="mhead"><h2 id="rsTitle">Retention vs target</h2>
+        <div class="deck-sort rs-win" role="group" aria-label="Time window">${RS_PERIODS.map(d => `<button type="button" data-rsw="${d}" aria-pressed="${d === savedRsWindow()}" aria-label="Last ${d} days">${d}d</button>`).join('')}</div></div>
       <div id="retSplit"><p class="muted">Working it out…</p></div>
     </section>`,
     cal: () => calendarHTML(D.cal, now),
@@ -556,6 +560,14 @@ export async function renderStats(el) {
   el.querySelectorAll('.chart').forEach(wireChart);
   // Retention vs target: read after the page is drawn (the split needs a longer stretch of the log).
   let deckOfAll = null;       // (one card -> deck map, built once)
+  let rsWin = savedRsWindow(), rsDone = null;       // rsDone: { res, has } once the log has been read
+  const drawRs = () => { const box = q('retSplit'); if (box && rsDone) box.innerHTML = retSplitHTML(rsDone.res, rsDone.has, rsWin); };
+  el.querySelectorAll('[data-rsw]').forEach(b => b.addEventListener('click', () => {
+    rsWin = +b.dataset.rsw;
+    try { localStorage.setItem(RS_KEY, String(rsWin)); } catch { /* not remembered: fine */ }
+    el.querySelectorAll('[data-rsw]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    drawRs();
+  }));
   if (q('retSplit')) loadRetentionLogs(logs).then(rows => {      // (not read at all when the card is hidden)
     const box = q('retSplit');
     if (!box || !el.isConnected) return;
@@ -567,7 +579,8 @@ export async function renderStats(el) {
       if (!byDeck.has(deckId)) byDeck.set(deckId, deckSchedulerOptions(settings, effectiveDeck(decks, deckId)).retention);
       return byDeck.get(deckId);
     };
-    box.innerHTML = retSplitHTML(retentionByAge(mine, Date.now(), RS_PERIODS, { targetOf }), mine.some(l => l.timestamp >= daysAgoStart(89) && l.state === 2));
+    rsDone = { res: retentionByAge(mine, Date.now(), RS_PERIODS, { targetOf }), has: mine.some(l => l.timestamp >= daysAgoStart(89) && l.state === 2) };
+    drawRs();
   }).catch(err => { console.error(err); const box = q('retSplit'); if (box) box.innerHTML = '<p class="muted">Couldn’t work this out.</p>'; });
   wireCalendar(el, () => { const c = calendarFromDays(pickedDays, now, 53, { rest, from: firstAnswerTime(pickedDays) }); return c.weeks.length < D.cal.weeks.length ? calendarHTML(c, now) : null; });
   q('planRest')?.addEventListener('click', async () => {

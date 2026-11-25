@@ -201,10 +201,17 @@ for (const [w, h, ui, mode] of LOOKS) {
 
   // ---------- Stats: retention vs target ----------
   await sheetSettled(p); await p.goto(URL + '#/stats'); await p.waitForSelector('#retSplit .rs-group', { timeout: 15000 });
-  ok((await p.locator('#retSplit .rs-group').count()) === 3, `${tag}: Stats shows 7, 30 and 90 days`);
-  const st = await p.textContent('#retSplit');
-  ok(/Last 7 days/.test(st) && /Last 30 days/.test(st) && /Last 90 days/.test(st) && /Young/.test(st) && /Mature/.test(st) && /target \d\d%/.test(st), `${tag}: young and mature against the target, per period`);
-  ok((await p.locator('#retSplit .rs-dot').count()) >= 4, `${tag}: a dot for each group with reviews`);
+  ok((await p.locator('#retSplit .rs-group').count()) === 1 && (await p.locator('.rs-win [data-rsw]').count()) === 3, `${tag}: Stats shows one window at a time, with a 7d / 30d / 90d switch`);
+  ok((await p.getAttribute('[data-rsw="30"]', 'aria-pressed')) === 'true' && /Last 30 days/.test(await p.textContent('#retSplit')), `${tag}: 30 days to start`);
+  let st = await p.textContent('#retSplit');
+  ok(/Young/.test(st) && /Mature/.test(st) && /target \d\d%/.test(st), `${tag}: young and mature against the target`);
+  for (const d of [7, 90]) {
+    await p.click(`[data-rsw="${d}"]`);
+    ok(new RegExp(`Last ${d} days`).test(await p.textContent('#retSplit')) && (await p.locator('#retSplit .rs-group').count()) === 1 && (await p.getAttribute(`[data-rsw="${d}"]`, 'aria-pressed')) === 'true', `${tag}: the ${d}d button shows the last ${d} days`);
+  }
+  await p.reload(); await p.waitForSelector('#retSplit .rs-group', { timeout: 15000 });
+  ok(/Last 90 days/.test(await p.textContent('#retSplit')) && (await p.getAttribute('[data-rsw="90"]', 'aria-pressed')) === 'true', `${tag}: the choice is remembered`);
+  ok((await p.locator('#retSplit .rs-dot').count()) >= 2, `${tag}: a dot for each row with reviews`);
   await sideways(p, `${tag} stats`);
   await p.screenshot({ path: `${SP}/retention-${look}-stats.png` });
   await p.context().close();
