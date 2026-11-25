@@ -87,7 +87,7 @@ const reload = async p => { await p.reload(); await p.waitForSelector('#deckGrid
 for (const ui of [false, true]) {
   const T = ui ? 'Clinical' : 'Original';
   const { ctx, p } = await open(ui ? 1440 : 390, ui ? 900 : 844, ui); await seed(p); await reload(p);
-  await p.click('[data-edit="A"]'); await p.click('#deckDelete'); await p.waitForSelector('#delCopy');
+  await p.click('[data-more="A"]'); await p.click('[data-edit="A"]'); await p.click('#deckDelete'); await p.waitForSelector('#delCopy');
   ok(await p.isVisible('#delCopy'), `${T}: "Save a copy first" is visible`);
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#delCopy')]);
   const txt = fs.readFileSync(await dl.path(), 'utf8');

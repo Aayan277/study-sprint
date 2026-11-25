@@ -104,15 +104,15 @@ async function paint(loaded) {
   const scroll = list.scrollTop;
   const top = data.decks.filter(d => !data.depth.get(d.id));
   list.innerHTML = top.map(d => {
-    const due = countFor(data, [d.id]).due, info = examInfo(d);
+    const cc = countFor(data, [d.id]), due = cc.due, info = examInfo(d);
     const show = info && info.daysLeft <= EXAM_PILL_DAYS;
     const soon = show && badgeClass(info).includes('soon');
-    const label = [d.name, plural(due, 'card') + ' due', info ? countdown(info).toLowerCase() : ''].filter(Boolean).join(', ');
+    const label = [cc.total ? `Study ${d.name}` : d.name, plural(due, 'card') + ' due', info ? countdown(info).toLowerCase() : ''].filter(Boolean).join(', ');
     const tip = [d.name, `${due.toLocaleString('en')} due`, info ? short(info.daysLeft) : ''].filter(Boolean).join(' · ');
-    return `<a class="side-deck" data-key="${esc(d.id)}" href="#/deck/${esc(d.id)}" style="--deck:${esc(d.color)}" aria-label="${esc(label)}" data-tip="${esc(tip)}"${show ? ` data-exam="${soon ? 'soon' : 'on'}"` : ''}>
+    return `<a class="side-deck" data-key="${esc(d.id)}" href="#/deck/${esc(d.id)}"${cc.total ? ' data-study' : ''} style="--deck:${esc(d.color)}" aria-label="${esc(label)}" data-tip="${esc(tip)}"${show ? ` data-exam="${soon ? 'soon' : 'on'}"` : ''}>
       <span class="side-name">${esc(d.name)}</span>
       ${show ? `<span class="side-exam${soon ? ' soon' : ''}" aria-hidden="true">${short(info.daysLeft)}</span>` : ''}
-      <span class="side-due${due ? '' : ' zero'}" aria-hidden="true">${due}</span></a>`;
+      <span class="side-due${due ? '' : ' zero'}" aria-hidden="true"${cc.total ? ' title="Open deck page"' : ''}>${due}</span></a>`;
   }).join('') + `<button class="side-deck side-new" data-key="new" type="button" data-tip="New deck">${icon('plus')}<span class="side-name">New deck</span></button>`;
   list.scrollTop = scroll;
   if (keep) list.querySelector(`[data-key="${CSS.escape(keep)}"]`)?.focus({ preventScroll: true });
@@ -241,7 +241,15 @@ export function initSidebar() {
   head.addEventListener('click', () => { const open = head.getAttribute('aria-expanded') !== 'true'; fold(open); saveFold(FOLD_KEY, open); fadeList(); });
 
   // + New deck: the deck editor is loaded the first time it is needed.
+  // A deck with something to study starts studying on a tap; the due count opens its page (and so does a deck with nothing to study).
   $('sideList').addEventListener('click', async e => {
+    const row = e.target.closest('a.side-deck[data-study]');
+    if (row && !e.target.closest('.side-due') && !(e.metaKey || e.ctrlKey || e.shiftKey || e.button)) {
+      e.preventDefault();
+      const { startStudy } = await import('./today.js');
+      startStudy({ deckIds: [row.dataset.key], deckId: row.dataset.key });
+      return;
+    }
     if (!e.target.closest('.side-new')) return;
     try {
       const { openDeckEditor } = await import('./decks.js');

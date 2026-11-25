@@ -16,7 +16,7 @@ await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.d
 await page.evaluate(async () => { const db = await import('./js/db.js'); const cs = (await db.getAll('cards')).sort((a, b) => a.created - b.created); const now = Date.now();
   await db.putMany('cardStates', [{ cardId: cs[0].id, due: now - 86400000, stability: 4, difficulty: 7, reps: 3, lapses: 2, state: 2 }, { cardId: cs[1].id, due: now + 5 * 86400000, stability: 9, difficulty: 3, reps: 4, lapses: 0, state: 2 }]);
   await db.addLog({ cardId: cs[0].id, timestamp: now - 3600000, source: 'review', correct: false, rating: 1, ms: 4200, state: 2 }); });
-await page.click('.deck-open'); await page.waitForSelector('.crow');
+await page.click('.deck-open .deck-counts'); await page.waitForSelector('.crow');
 ok((await page.locator('.crow').count()) === 12, 'deck page lists all 12 cards');
 ok(await page.locator('#brCount').isHidden(), 'deck page: no count above the list while nothing is filtered');
 await noHScroll('card list'); await page.screenshot({ path: SP + '/b-list.png' });
@@ -68,7 +68,7 @@ await page.click('.tab[data-tab=play]'); await page.waitForSelector('#pDeck');
 ok((await page.textContent('#pDeck option:checked')).includes('(10)'), 'Play leaves them out too (v4.9: the deck option shows its own count, the "All decks (10 cards)" row is gone)');
 
 // select several + bulk actions + add card + delete
-await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck'); await page.click('.deck-open'); await page.waitForSelector('.crow');
+await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck'); await page.click('.deck-open .deck-counts'); await page.waitForSelector('.crow');
 ok((await page.textContent('.deck-summary')).includes('2 suspended or buried'), 'deck summary counts suspended/buried');
 await page.click('#brSelect');
 await page.locator('.crow').nth(0).click(); await page.locator('.crow').nth(1).click(); await page.locator('.crow').nth(2).click();

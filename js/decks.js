@@ -130,7 +130,7 @@ export async function renderLibrary(el) {
     const { deck, stats } = item; const c = cnt(deck.id), go = c.total; const learned = stats.total ? (stats.young + stats.mature) / stats.total : 0;
     return `
       <article class="deck" style="--deck:${esc(deck.color)}">
-        <button class="deck-open" type="button" data-open="${esc(deck.id)}">
+        <a class="deck-open" href="#/deck/${esc(deck.id)}" data-open="${esc(deck.id)}"${go ? ` data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}"` : ''}>
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
           <span class="deck-name">${esc(deck.name)}</span>
           ${examInfo(deck) ? `<span class="${badgeNear(examInfo(deck))}">${esc(countdown(examInfo(deck)))}</span>` : ''}
@@ -141,16 +141,18 @@ export async function renderLibrary(el) {
             <span class="deck-mastered"><b>${Math.round(learned * 100)}%</b> mastered</span>` : '<span>No cards yet</span>'}
             ${view.hits?.get(deck.id) ? `<span class="hit"><b>${view.hits.get(deck.id).toLocaleString('en')}</b> matching</span>` : ''}
           </span>
-        </button>
+        </a>
         ${stats.total ? `<span class="deck-ring" role="img" aria-label="${Math.round(learned * 100)}% learned">${ring(learned, 44, 4, `<span class="mono">${Math.round(learned * 100)}<small>%</small></span>`)}</span>` : ''}
-        <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
+        <button class="icon-btn" type="button" data-more="${esc(deck.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="More for ${esc(deck.name)}">${icon('more')}</button>
+        <div class="more-menu deck-menu" role="menu" aria-label="${esc(deck.name)}" hidden>
+          <button type="button" role="menuitem" tabindex="-1" data-page="${esc(deck.id)}">${icon('layers')} Open deck</button>
+          <button type="button" role="menuitem" tabindex="-1" data-edit="${esc(deck.id)}">${icon('edit')} Edit deck</button>
+        </div>
         <div class="deck-act">
           ${!stats.total ? `<a class="${compact ? 'deck-go add add-cards-btn' : 'btn ghost small'}" href="#/import/${esc(deck.id)}">+ Add cards</a>`
-          : compact
-            ? (go ? `<button class="deck-go${first ? ' lead' : ''}" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}" title="Study ${plural(go, 'card')}">${icon('play')}</button>`
-                  : `<span class="deck-go done" role="img" aria-label="Done for today" title="Done for today">${icon('check')}</span>`)
-            : (go ? `<button class="btn primary small" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}">${icon('play')} Study ${go}</button>`
-                  : `<span class="deck-done">${icon('check')} Done for today</span>`)}
+          : go ? ''
+          : compact ? `<span class="deck-go done" role="img" aria-label="Done for today" title="Done for today">${icon('check')}</span>`
+                    : `<span class="deck-done">${icon('check')} Done for today</span>`}
         </div>
         ${compact ? compactSubdecks(item, q) : subdeckBox(list, item, !fold.has(deck.id), today, cnt)}
       </article>`;
@@ -253,12 +255,42 @@ export async function renderLibrary(el) {
     drawGrid();
   }));
   // One listener for all the tiles, so redrawing them needs no re-wiring.
-  grid?.addEventListener('click', e => {
-    const open = e.target.closest('[data-open]'), study = e.target.closest('[data-study]'), edit = e.target.closest('[data-edit]');
-    if (open) navGo(`#/deck/${open.dataset.open}`);
-    else if (study) startStudy({ deckIds: [study.dataset.study], deckId: study.dataset.study });
-    else if (edit) openDeckEditor(list.find(x => x.deck.id === edit.dataset.edit).deck, () => renderLibrary(el));
+  // The main tap on a deck studies it (a deck with nothing to study opens its page); its page is also under the counts and in the ⋯ menu.
+  const closeMenus = (except = null) => grid?.querySelectorAll('.deck-menu:not([hidden])').forEach(m => {
+    if (m === except) return;
+    m.hidden = true; m.parentElement.querySelector('[data-more]')?.setAttribute('aria-expanded', 'false');
   });
+  grid?.addEventListener('click', e => {
+    const more = e.target.closest('[data-more]'), page = e.target.closest('[data-page]'), edit = e.target.closest('[data-edit]');
+    const main = e.target.closest('a.deck-open'), sub = e.target.closest('.subdeck[data-open]');
+    if (more) {
+      const menu = more.parentElement.querySelector('.deck-menu');
+      closeMenus(menu);
+      menu.hidden = !menu.hidden; more.setAttribute('aria-expanded', String(!menu.hidden));
+      if (!menu.hidden) menu.querySelector('[role=menuitem]').focus();
+      return;
+    }
+    if (page || edit) { const m = (page || edit).closest('.deck-menu'); closeMenus(); m.parentElement.querySelector('[data-more]').focus(); }
+    if (page) navGo(`#/deck/${page.dataset.page}`);
+    else if (edit) openDeckEditor(list.find(x => x.deck.id === edit.dataset.edit).deck, () => renderLibrary(el));
+    else if (main) {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;          // (the link still opens in a new tab)
+      e.preventDefault();
+      if (main.dataset.study && !e.target.closest('.deck-counts')) startStudy({ deckIds: [main.dataset.study], deckId: main.dataset.study });
+      else navGo(`#/deck/${main.dataset.open}`);
+    }
+    else if (sub) navGo(`#/deck/${sub.dataset.open}`);
+  });
+  grid?.addEventListener('keydown', e => {
+    const m = e.target.closest('.deck-menu'); if (!m) return;
+    const items = [...m.querySelectorAll('[role=menuitem]')], i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenus(); m.parentElement.querySelector('[data-more]').focus(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Tab') closeMenus();
+  });
+  const outsideMenu = e => { if (!grid?.isConnected) { document.removeEventListener('pointerdown', outsideMenu, true); return; } if (!e.target.closest('.deck-menu, [data-more]')) closeMenus(); };
+  document.addEventListener('pointerdown', outsideMenu, true);
   // 'toggle' doesn't bubble, so it is caught on the way down. A fold the search opened is not remembered.
   grid?.addEventListener('toggle', e => {
     const d = e.target;

@@ -14,7 +14,7 @@ const counts = async () => (await page.$$eval('.rv-counts span', s => s.map(x =>
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 ok((await page.getAttribute('#screen', 'aria-live')) === null && (await page.getAttribute('#toastLive', 'role')) === 'status', 'the whole screen is not a live region; the toast still announces');
 // gear toggle: deck page -> settings -> gear -> back to deck page
-await page.click('.deck-open'); await page.waitForSelector('.crow'); const deckUrl = page.url();
+await page.click('.deck-open .deck-counts'); await page.waitForSelector('.crow'); const deckUrl = page.url();
 await page.click('#gearBtn'); await page.waitForSelector('#npd');
 ok((await page.getAttribute('#gearBtn', 'aria-label')) === 'Close settings', 'gear becomes a close button');
 await page.click('#gearBtn'); await page.waitForSelector('.crow');
@@ -32,7 +32,7 @@ await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck');
   const live = () => page.evaluate(() => { const e = document.getElementById('toastLive'); return { text: e.textContent, inDialog: !!e.closest('dialog:modal'), inert: !!e.closest('[inert]'), parent: e.parentElement.tagName }; });
   await say('Card moved', { link: { href: '#/decks', label: 'Undo' } }); await page.waitForTimeout(150);
   ok((await live()).text === 'Card moved Undo' && (await live()).parent === 'BODY', 'the live region reads the message and the Undo label: ' + (await live()).text);
-  await page.click('.deck-open'); await page.waitForSelector('.crow'); await page.locator('.crow').first().click(); await page.waitForSelector('#sheet:modal');
+  await page.click('.deck-open .deck-counts'); await page.waitForSelector('.crow'); await page.locator('.crow').first().click(); await page.waitForSelector('#sheet:modal');
   await say('Saved while the sheet is open'); await page.waitForTimeout(150);
   const inSheet = await live();
   ok(inSheet.inDialog && !inSheet.inert && inSheet.text === 'Saved while the sheet is open', 'with #sheet open the live region sits inside it, outside the inert part, and holds the text: ' + JSON.stringify(inSheet));
@@ -161,7 +161,7 @@ ok(s.newPerDay === 15 && s.targetRetention === 0.85, 'study settings saved');
 await page.screenshot({ path: SP + '/r-settings.png', fullPage: true }); await noHScroll('settings');
 // deck page review button
 await page.click('#gearBtn'); await page.evaluate(() => { location.hash = '#/decks'; }); await page.waitForSelector('.deck');   // gear returns to the round, where the tab bar is hidden
-await page.click('.deck-open'); await page.waitForSelector('a[href^="#/review/"]');
+await page.click('.deck-open .deck-counts'); await page.waitForSelector('a[href^="#/review/"]');
 await page.click('a[href^="#/review/"]');
 // a session from Today is still going, so a different one asks first (see the e2e-today checks for the details)
 await page.waitForSelector('#soNew'); await page.click('#soNew'); await page.waitForSelector('#flash');

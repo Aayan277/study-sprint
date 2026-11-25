@@ -181,7 +181,7 @@ ok(await page.isChecked('#singleKeys'), 'Settings: turned back on');
 
 // ---------- 5. Browse select mode keeps focus ----------
 await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
-await page.click('.deck-open'); await page.waitForSelector('.crow');
+await page.click('.deck-open .deck-counts'); await page.waitForSelector('.crow');
 await page.focus('#brSelect'); await page.keyboard.press('Enter');
 await page.focus('.crow .crow-btn'); const firstRow = await page.evaluate(() => document.activeElement.closest('.crow').dataset.id);
 ok(await attr('.crow .crow-btn', 'role') === 'checkbox' && await attr('.crow .crow-btn', 'aria-checked') === 'false', 'Select: rows are checkboxes, unchecked');
@@ -196,14 +196,14 @@ ok(await page.evaluate(() => document.activeElement.getAttribute('aria-checked')
 
 // ---------- 17. Browse rows keep maths in their name ----------
 await page.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards'))[0]; await db.saveCards([{ ...c, id: 'math1', front: 'What is $\\frac{1}{2}+\\frac{1}{4}$?', back: '$\\frac{3}{4}$', created: Date.now() }]); });
-await page.goto(URL + '#/decks'); await page.waitForSelector('.deck'); await page.click('.deck-open'); await page.waitForSelector('.crow');
+await page.goto(URL + '#/decks'); await page.waitForSelector('.deck'); await page.click('.deck-open .deck-counts'); await page.waitForSelector('.crow');
 { const label = await page.evaluate(() => [...document.querySelectorAll('.crow-btn')].map(b => b.getAttribute('aria-label')).find(l => l.includes('What is')));
   console.log('   maths row:', label);
   ok(label && label.includes('1/2') && label.includes('3/4') && !/katex|\\frac/i.test(label), 'Browse: a row with maths is named with the formulas as words'); }
 await page.evaluate(async () => (await import('./js/db.js')).deleteCards(['math1']));
 
 // ---------- 18. Formatting toolbar: one Tab stop ----------
-await page.goto(URL + '#/decks'); await page.waitForSelector('.deck'); await page.click('.deck-open'); await page.waitForSelector('#brAdd');
+await page.goto(URL + '#/decks'); await page.waitForSelector('.deck'); await page.click('.deck-open .deck-counts'); await page.waitForSelector('#brAdd');
 await page.click('#brAdd'); await page.waitForSelector('#acForm');
 const bar = '#acFront';
 const toolStops = () => page.evaluate(() => { const b = document.querySelector('#acForm .fmt-tools'); return [...b.querySelectorAll('button')].filter(x => x.tabIndex === 0).length; });
@@ -237,7 +237,7 @@ ok(await page.evaluate(() => { const f = document.activeElement; return f?.getAt
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 
 // ---------- 3. Form errors: Edit deck ----------
-await page.goto(URL + '#/decks'); await page.waitForSelector('.deck'); await page.click('.deck-open'); await page.waitForSelector('#deckMore');
+await page.goto(URL + '#/decks'); await page.waitForSelector('.deck'); await page.click('.deck-open .deck-counts'); await page.waitForSelector('#deckMore');
 await page.click('#deckMore'); await page.click('[data-act=edit], #deckEdit, button:has-text("Edit deck")'); await page.waitForSelector('#deckForm');
 await page.fill('#deckName', ''); await page.focus('#deckCourse');
 await page.evaluate(() => document.querySelector('#deckForm').requestSubmit());

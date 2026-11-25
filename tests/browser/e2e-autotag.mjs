@@ -49,7 +49,7 @@ await p.evaluate(async () => { const db = await import('./js/db.js'); const all 
 const week1 = Object.entries(await tagsById(p)).filter(([, t]) => t.includes('week1')).map(([id]) => id);
 const original = await tagsById(p);
 await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
-await p.click('.deck-open'); await p.waitForSelector('.crow');
+await p.click('.deck-open .deck-counts'); await p.waitForSelector('.crow');
 await p.click('#deckMore');
 ok(!(await p.$('#autoTag')), 'the ⋯ menu no longer has Suggest tags (it lives in Tools only)');
 await p.keyboard.press('Escape');
@@ -228,7 +228,7 @@ await p.keyboard.press('Escape');
 await p.context().close();
 p = await open({ w: 320, h: 640 });
 await pasteDeck(p, 'Biology', LINES);
-await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck'); await p.click('.deck-open'); await p.waitForSelector('.crow');
+await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck'); await p.click('.deck-open .deck-counts'); await p.waitForSelector('.crow');
 await openSuggest(p);
 await noHScroll(p, '320px, Suggest tags');
 await p.locator('.tag-sugs li').first().locator('button[aria-controls]').click();
@@ -243,7 +243,7 @@ await p.context().close();
 // ---- 10. no workers: the same, in small slices on the page ----
 p = await open({ init: () => { delete window.Worker; } });
 await pasteDeck(p, 'Biology', LINES);
-await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck'); await p.click('.deck-open'); await p.waitForSelector('.crow');
+await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck'); await p.click('.deck-open .deck-counts'); await p.waitForSelector('.crow');
 await openSuggest(p);
 ok((await p.locator('.tag-sugs li').count()) >= 3, 'with no Worker in the browser the tags are still found (' + await p.locator('.tag-sugs li').count() + ')');
 await p.context().close();

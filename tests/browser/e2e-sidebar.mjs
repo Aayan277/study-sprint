@@ -95,11 +95,11 @@ ok((await p.textContent('.side-decks')).includes('New deck'), 'the list ends wit
 ok((await p.getAttribute('.side-deck[data-key=org]', 'aria-label')).includes('4 cards due') && (await p.getAttribute('.side-deck[data-key=org]', 'aria-label')).includes('exam in 2 days'), 'a row says its due count and exam to a screen reader');
 
 // clicking a deck opens it and highlights it
-await p.click('.side-deck[data-key=eco]'); await p.waitForSelector('main[data-route=deck]');
+await p.click('.side-deck[data-key=eco] .side-due'); await p.waitForSelector('main[data-route=deck]');
 ok(p.url().endsWith('#/deck/eco'), 'clicking a deck opens it');
 ok(await p.locator('.side-deck[aria-current="page"]').count() === 1 && (await p.getAttribute('.side-deck[aria-current="page"]', 'data-key')) === 'eco', 'and marks it aria-current');
 ok((await p.getAttribute('.tab[data-tab=decks]', 'aria-current')) === 'true', 'the Decks link is current too, as the section ("true"; the deck row holds "page")');
-await p.click('.side-deck[data-key=bio]'); await p.waitForSelector('main[data-route=deck] h1'); await p.waitForFunction(() => location.hash.endsWith('/bio') && document.querySelector('.side-deck[data-key=bio]')?.getAttribute('aria-current') === 'page');   // v4.9: wait for the move (the old deck page also has an h1)
+await p.click('.side-deck[data-key=bio] .side-due'); await p.waitForSelector('main[data-route=deck] h1'); await p.waitForFunction(() => location.hash.endsWith('/bio') && document.querySelector('.side-deck[data-key=bio]')?.getAttribute('aria-current') === 'page');   // v4.9: wait for the move (the old deck page also has an h1)
 ok((await p.locator('.side-deck[aria-current="page"]').count()) === 1 && (await p.getAttribute('.side-deck[aria-current="page"]', 'data-key')) === 'bio', 'the highlight moves to the next deck');
 await go(p, '#/stats', 'main[data-route=stats] .card');
 ok(await p.locator('.side-deck[aria-current]').count() === 0 && (await p.getAttribute('.tab[data-tab=stats]', 'aria-current')) === 'page', 'on another screen no deck is highlighted');
@@ -338,7 +338,7 @@ ok(await p.isHidden('.side-tip'), 'Escape dismisses it');
 await go(p, '#/decks', '.deck');
 ok(!(await p.isVisible('#sideSync')) && await p.isVisible('#sideSet') && await p.isVisible('#sideMode') && await p.isVisible('#sideStreak'), 'footer: ring, Settings, light/dark and the toggle stay; the text goes');
 ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth) && (await box(p, '#sideCollapse')).b <= 900, 'the rail fits');
-await p.click('.side-deck[data-key=org]'); await p.waitForSelector('main[data-route=deck] h1');
+await p.evaluate(() => { location.hash = '#/deck/org'; }); await p.waitForSelector('main[data-route=deck] h1');
 ok((await p.getAttribute('.side-deck[data-key=org]', 'aria-current')) === 'page', 'in the rail the open deck is highlighted too');
 await go(p, '#/stats', 'main[data-route=stats] .card');
 await p.screenshot({ path: `${SP}/desk/sidebar-rail.png` });

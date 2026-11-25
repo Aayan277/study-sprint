@@ -81,7 +81,7 @@ for (const [label, viewport, touch] of [['PC 1440x900', PC, false], ['phone 390x
     const rows = await p.$$eval('.decks.compact .deck', ds => ds.map(d => Math.round(d.getBoundingClientRect().height)));
     ok(rows.length === 3 && rows.every(h => h <= 130), label + ': Decks rows are 130px or less: ' + rows.join(', '));
     const taps = await p.$$eval('.decks.compact .deck', ds => ds.map(d => [...d.querySelectorAll('.deck-go, .icon-btn, .deck-open')].map(e => { const r = e.getBoundingClientRect(); return Math.round(Math.min(r.width, r.height)); })));
-    ok(taps.every(r => r.length === 3 && r.every(s => s >= 44)), label + ': every Decks tap target (open, menu, play) is 44px or more: ' + JSON.stringify(taps));
+    ok(taps.every(r => r.length === 2 && r.every(s => s >= 44)), label + ': every Decks tap target (open, menu) is 44px or more: ' + JSON.stringify(taps));
   }
   await noHScroll(p, label + ' Decks');
   await go(p, '#/deck/bio', '#reviewBtn');

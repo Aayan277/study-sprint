@@ -23,7 +23,7 @@ ok(await page.title() === 'Settings · Study Sprint' && (await focusInfo()).text
 await go('#/play', '#startBtn');
 ok(await page.title() === 'Play · Study Sprint' && (await focusInfo()).text === 'Play', 'Play: title and focus');
 await go('#/decks', '.deck-open');
-await page.click('.deck-open'); await page.waitForSelector('.crow');
+await page.click('.deck-open .deck-counts'); await page.waitForSelector('.crow');
 const deckName = await page.textContent('h1');
 ok(await page.title() === `${deckName} · Study Sprint` && (await focusInfo()).text === deckName, 'a deck: its name is the title, and the heading has focus');
 ok((await focusInfo()).scrollY === 0, 'focus moved without scrolling the page');

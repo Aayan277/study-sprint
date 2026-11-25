@@ -54,7 +54,7 @@ for (const style of ['original', 'clinical']) {
 
   // ---- 2. deck drill-down ----
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
-  await p.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+  await p.evaluate(() => (document.querySelector('.deck-counts') || document.querySelector('a[href^="#/deck/"]')).click());
   await p.waitForSelector('#reviewBtn, .deck-page, #back'); await p.waitForTimeout(300);
   const deckHash = await hash(p);
   ok(/^#\/deck\//.test(deckHash), tag + 'drill-down: a deck page opened (' + deckHash + ')');
@@ -66,7 +66,7 @@ for (const style of ['original', 'clinical']) {
 
   // deck's own back button, then Back
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
-  await p.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+  await p.evaluate(() => (document.querySelector('.deck-counts') || document.querySelector('a[href^="#/deck/"]')).click());
   await p.waitForSelector('#back'); await p.click('#back'); await p.waitForSelector('.deck'); await p.waitForTimeout(300);
   ok(await hash(p) === '#/decks', tag + 'drill-down: the deck page back button returns to Decks');
   await back(p);
@@ -74,7 +74,7 @@ for (const style of ['original', 'clinical']) {
 
   // a tab from inside a drill-down drops the drill-down
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
-  await p.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+  await p.evaluate(() => (document.querySelector('.deck-counts') || document.querySelector('a[href^="#/deck/"]')).click());
   await p.waitForSelector('#back'); await tab(p, 'stats'); await p.waitForSelector('#screen[data-route=stats]');
   ok(await hash(p) === '#/stats', tag + 'tab from a deck page: Stats shows');
   await back(p);
@@ -108,7 +108,7 @@ for (const style of ['original', 'clinical']) {
 
   // ---- 4. Review asks before leaving ----
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
-  await p.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+  await p.evaluate(() => (document.querySelector('.deck-counts') || document.querySelector('a[href^="#/deck/"]')).click());
   await p.waitForSelector('#reviewBtn'); await p.click('#reviewBtn'); await p.waitForSelector('#flash'); await p.waitForTimeout(400);
   const rvHash = await hash(p);
   await back(p);
@@ -129,7 +129,7 @@ for (const style of ['original', 'clinical']) {
   ok(await hash(p) === '#/decks', tag + 'review: and then Decks');
 
   // End button (no back gesture) leaves no stale entry either
-  await p.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+  await p.evaluate(() => (document.querySelector('.deck-counts') || document.querySelector('a[href^="#/deck/"]')).click());
   await p.waitForSelector('#reviewBtn'); await p.click('#reviewBtn'); await p.waitForSelector('#flash'); await p.waitForTimeout(400);
   await p.click('#endBtn'); await p.waitForTimeout(600);
   await back(p);
@@ -188,7 +188,7 @@ for (const style of ['original', 'clinical']) {
 
   // ---- 7. a raw hash change to a tab (address bar, another app's link): kept as the browser made it ----
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
-  await p.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+  await p.evaluate(() => (document.querySelector('.deck-counts') || document.querySelector('a[href^="#/deck/"]')).click());
   await p.waitForSelector('#back'); await p.waitForTimeout(300);
   await p.evaluate(() => { location.hash = '#/stats'; });
   await p.waitForSelector('#screen[data-route=stats]'); await p.waitForTimeout(300);
@@ -200,7 +200,7 @@ for (const style of ['original', 'clinical']) {
 
   // ---- 8. reload and deep links ----
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
-  await p.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+  await p.evaluate(() => (document.querySelector('.deck-counts') || document.querySelector('a[href^="#/deck/"]')).click());
   await p.waitForSelector('#back'); const dh = await hash(p);
   await p.reload(); await p.waitForSelector('#back'); await p.waitForTimeout(400);
   ok(await hash(p) === dh, tag + 'reload: stays on the deck page');
@@ -223,7 +223,7 @@ for (const style of ['original', 'clinical']) {
 // ====== the review blockers (v4.22 merge): holds released under a sheet, the Play clock, Back skipping entries, late races ======
 const deckPage = async p => {
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
-  await p.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+  await p.evaluate(() => (document.querySelector('.deck-counts') || document.querySelector('a[href^="#/deck/"]')).click());
   await p.waitForSelector('#reviewBtn'); await p.waitForTimeout(300);
 };
 const startReview = async p => { await deckPage(p); await p.click('#reviewBtn'); await p.waitForSelector('#flash'); await p.waitForTimeout(400); };
@@ -329,7 +329,7 @@ for (const [fmt, what] of [['lightning', 'Lightning'], ['survival', 'Survival'],
   await p.goto(URL + '#/today'); await p.waitForSelector('#screen .view'); await p.waitForTimeout(800);
   await p.evaluate(async () => (await import('./js/ui.js')).openSheet('<h2 id="sheetTitle">T</h2>', { side: true })); await p.waitForTimeout(300);
   ok(await sheetOpen(p), 'race: the side panel is open');
-  await p.evaluate(() => { document.querySelector('.sheet-x').click(); document.querySelector('a.side-deck').click(); });
+  await p.evaluate(() => { document.querySelector('.sheet-x').click(); document.querySelector('a.side-deck .side-due').click(); });
   await p.waitForTimeout(1200);
   const st = await p.evaluate(() => ({ h: location.hash, k: history.state?.k, ss: history.state?.ss, h1: document.querySelector('#screen h1')?.textContent }));
   ok(/^#\/deck\//.test(st.h) && st.k === 'page' && st.ss === 1, 'race: closing the panel and clicking a deck in one tick opens the deck, one page entry deep: ' + JSON.stringify(st));

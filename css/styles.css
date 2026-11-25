@@ -2607,6 +2607,8 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 .more-menu button:focus-visible{background:var(--surface-2)}
 @media (hover:hover) and (pointer:fine){.more-menu button:hover{background:var(--surface-2)}}
 .more-menu button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.deck-menu{top:44px;right:8px;z-index:12}
+.deck:has(.deck-menu:not([hidden])){overflow:visible;z-index:12}
 @media (min-width:1024px){
   main[data-route="deck"] .screen-head .head-actions .btn{flex:none;padding:6px 14px}
   main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:none;order:0;min-height:40px;font-size:var(--fs-sm)}

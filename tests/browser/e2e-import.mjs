@@ -11,7 +11,7 @@ const noHScroll = async w => ok(await page.evaluate(() => document.documentEleme
 
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // open the sample deck, go to import from there
-await page.click('.deck-open'); await page.waitForSelector('.crow');
+await page.click('.deck-open .deck-counts'); await page.waitForSelector('.crow');
 await page.click('#deckMore'); await page.click('#importHere'); await page.waitForSelector('#pasteBox');      // (Import is in the deck's ⋯ menu)
 ok((await page.$eval('#deckSel', s => s.selectedOptions[0].textContent)).includes('Sample deck'), 'deck preselected from deck page');
 await noHScroll('import empty');

@@ -18,7 +18,7 @@ const left = p => p.url() === 'about:blank';
 // Find a review address the normal way first.
 const p0 = await open();
 await p0.goto(URL + '#/decks'); await p0.waitForSelector('.deck');
-await p0.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+await p0.evaluate(() => (document.querySelector('.deck-counts') || document.querySelector('a[href^="#/deck/"]')).click());
 await p0.waitForSelector('#reviewBtn'); await p0.click('#reviewBtn'); await p0.waitForSelector('#flash'); await p0.waitForTimeout(400);
 const rv = await hash(p0);
 await p0.close();

@@ -14,7 +14,7 @@ for (const width of [320, 375]) for (const mode of ['light', 'dark']) {
   // screens: [name, how to get there]
   const screens = [
     ['decks', async () => { await p.goto('http://localhost:8123/#/decks'); await p.reload(); await p.waitForSelector('.deck'); }],
-    ['deck', async () => { await p.click('.deck-open'); await p.waitForSelector('.crow'); }],
+    ['deck', async () => { await p.click('.deck-open .deck-counts'); await p.waitForSelector('.crow'); }],
     ['deck-edit', async () => { await deckMenu(p); await p.click('#editDeck'); await p.waitForSelector('#deckName'); await p.click('#deckDelete'); }],
     ['import', async () => { await p.goto('http://localhost:8123/#/import'); await p.waitForSelector('#pasteBox'); await p.fill('#pasteBox', 'A fairly long term name here - with a definition that goes on for a while, longer than the box\nB - c\nD - e'); await p.waitForSelector('.prow'); }],
     ['review-setup', async () => { await p.goto('http://localhost:8123/#/review'); await p.waitForSelector('#startBtn'); }],

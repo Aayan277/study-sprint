@@ -42,7 +42,7 @@ const deckOf = p => p.evaluate(() => { location.hash = '#/decks'; });
 // ---------- 1. unsaved edits ----------
 {
   const p = await open();
-  await p.click('.deck-open'); await p.waitForSelector('.crow');
+  await p.click('.deck-open .deck-counts'); await p.waitForSelector('.crow');
   // Add card: typed text, then Back
   await p.click('#brAdd'); await p.waitForSelector('#acFront');
   await back(p);
@@ -69,7 +69,7 @@ const deckOf = p => p.evaluate(() => { location.hash = '#/decks'; });
   ok(await p.evaluate(() => location.hash) === '#/decks', 'Add card: the next Back goes to Decks (no leftover entry)');
 
   // After a card is added the form is empty again (the tags stay): Close is not asked about
-  await p.click('.deck-open'); await p.waitForSelector('.crow');
+  await p.click('.deck-open .deck-counts'); await p.waitForSelector('.crow');
   await p.click('#brAdd'); await p.waitForSelector('#acFront');
   await p.click('#acFront'); await p.keyboard.type('Front one');
   await p.click('#acBack'); await p.keyboard.type('Back one');
@@ -80,7 +80,7 @@ const deckOf = p => p.evaluate(() => { location.hash = '#/decks'; });
   await back(p);
 
   // Editing a card from the card list: change then Back
-  await p.click('.deck-open'); await p.waitForSelector('.crow');
+  await p.click('.deck-open .deck-counts'); await p.waitForSelector('.crow');
   await p.click('.crow-btn'); await p.waitForSelector('#ceForm');
   await p.click('.sheet-x'); await p.waitForTimeout(400);
   ok(!(await sheetOpen(p)), 'Edit: closing an untouched card does not ask');

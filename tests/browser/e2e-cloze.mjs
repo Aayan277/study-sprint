@@ -45,7 +45,7 @@ ok(r.c2Kept, 'edit: c2 keeps its card, schedule and history');
 ok(r.c3Gone && r.tombstone, 'edit: the removed blank deletes its card, schedule and history, leaving a deleted marker');
 
 // ---- 2. the add form: Basic | Cloze ----
-await page.click('.deck-open'); await page.waitForSelector('.crow');
+await page.click('.deck-open .deck-counts'); await page.waitForSelector('.crow');
 const deckUrl = page.url();
 const selectIn = (id, word) => page.evaluate(([id, word]) => { const t = document.getElementById(id); const i = t.value.indexOf(word); t.focus(); t.setSelectionRange(i, i + word.length); }, [id, word]);
 await page.click('#brAdd'); await page.waitForSelector('#acForm');

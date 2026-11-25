@@ -68,7 +68,7 @@ await p.click('#optBtn'); await p.waitForSelector('#sheet[open]'); await p.keybo
 await p.waitForFunction(() => !document.getElementById('sheet').open);
 ok(await p.evaluate(() => document.activeElement?.id) === 'optBtn', 'Escape closes the sheet and focus goes back too');
 // a sticky footer: scrolling a long sheet keeps Save in view (Edit deck)
-await go(p, '#/decks', '.deck'); await p.click('[data-edit="econ"]'); await p.waitForSelector('#deckForm'); await p.waitForTimeout(400);
+await go(p, '#/decks', '.deck'); await p.click('[data-more="econ"]'); await p.click('[data-edit="econ"]'); await p.waitForSelector('#deckForm'); await p.waitForTimeout(400);
 sh = await box(p, '#sheet'); sec = await box(p, '#deckCancel'); prim = await box(p, 'button[type=submit][form=deckForm]');
 ok(prim.x > sec.x && Math.abs(prim.b - sh.b) < 30, 'Edit deck: Cancel on the left, Save on the right, both at the bottom');
 const y0 = (await box(p, '.sheet-foot')).y; await p.$eval('#sheet .sheet-in', e => { e.scrollTop = e.scrollHeight; });
@@ -103,7 +103,7 @@ ok(!(await p.$('.dsum')), 'the summary strip is gone');
 ok((await p.$$eval('#deckGrid > .deck', d => d.length)) === 7, 'one tile per course (subdecks are not tiles)');
 let n = await names(p);
 ok(n.indexOf('Microeconomics') < n.indexOf('Law') && n.indexOf('Law') < n.indexOf('Cell Biology'), 'Due first puts the course with most due on top: ' + n.join(', '));
-ok(await p.$eval('#deckGrid .deck .deck-go.lead', e => e.closest('.deck').querySelector('.deck-name').textContent) === 'Microeconomics', 'and the first one has the filled play button');
+ok(await p.$eval('#deckGrid .deck .deck-open[data-study]', e => e.querySelector('.deck-name').textContent) === 'Microeconomics', 'and the first one studies on a tap');
 await p.click('[data-sort=exam]'); n = await names(p);
 ok(n[0] === 'Cell Biology' && (await p.getAttribute('[data-sort=exam]', 'aria-pressed')) === 'true', 'Exam puts the nearest exam first: ' + n.slice(0, 3).join(', '));
 await p.click('[data-sort=az]'); n = await names(p);
@@ -132,13 +132,13 @@ await p.click('.subdecks summary'); await p.waitForTimeout(100); await p.reload(
 ok(!(await p.$eval('.subdecks', d => d.open)), 'and so is a closed one');
 // small round play buttons
 ok(await p.$$eval('.deck-act .btn', b => b.length) === 0, 'no full-width Study buttons');
-const go1 = await box(p, '.deck-go'); ok(go1.w === 44 && go1.h === 44, 'the play button is a 44px circle on a phone (round 4), ' + go1.w + 'x' + go1.h);
+const go1 = await box(p, '.deck-open'); ok(go1.h >= 44 && await p.$('.deck-go:not(.done):not(.add)') === null, 'the deck tile is the tap target (44px+ tall) and the round play button is gone, ' + go1.w + 'x' + go1.h);
 ok((await p.getAttribute('[data-study="econ"]', 'aria-label')) === 'Study Microeconomics: 6 cards', 'with an accessible name: ' + await p.getAttribute('[data-study="econ"]', 'aria-label'));
-ok(await p.$eval('.deck:has([data-study="zed"]) .deck-go', e => !!e), 'a deck with cards to study has a play button');
+ok(await p.$eval('.deck:has([data-study="zed"]) .deck-open', e => e.getAttribute('aria-label').startsWith('Study')), 'a deck with cards to study starts on a tap');
 // Round 2 A6: a deck with no cards at all is not "done": it offers + Add cards (the check is for decks that are caught up; see e2e-counts.mjs)
 ok(await p.locator('.deck:has-text("Chemistry") a.deck-go.add[href="#/import/chem"]').count() === 1 && await p.$('.deck-go.done') === null, 'an empty deck shows + Add cards instead of a check');
 await p.click('[data-study="econ"]'); await p.waitForSelector('#flash');
-ok(await p.evaluate(() => location.hash) === '#/review/econ', 'the play button starts the deck');
+ok(await p.evaluate(() => location.hash) === '#/review/econ', 'tapping the deck starts it');
 await p.click('#endBtn'); await p.waitForSelector('.finish-next');
 // the switch: Settings → Appearance
 await go(p, '#/settings', '#compactDecks');
@@ -149,7 +149,7 @@ await p.click('label:has(#compactDecks)'); await p.waitForTimeout(150);
 ok((await p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).compactDecks)) === false, 'turning it off is saved');
 await go(p, '#/decks', '.deck');
 ok(!(await p.$('.deck-tools')) && await p.isVisible('.dsum') && await p.$eval('.subdecks', d => d.open), 'off: the old list is back (summary strip, no search, subdecks showing)');
-ok((await p.textContent('[data-study="econ"]')).trim() === 'Study 6' && await p.$$eval('.deck-act .btn.primary', b => b.length) >= 3, 'off: full-width "Study N" buttons are back');
+ok(await p.$$eval('.deck-act .btn.primary', b => b.length) === 0 && await p.getAttribute('[data-study="econ"]', 'aria-label') === 'Study Microeconomics: 6 cards', 'off: the tile itself studies, there is no Study N button');
 ok(await p.$$eval('.deck-go', b => b.length) === 0, 'off: no round buttons');
 await go(p, '#/settings', '#compactDecks'); await p.click('label:has(#compactDecks)'); await p.waitForTimeout(150);
 await go(p, '#/decks', '.deck-tools');
