@@ -81,16 +81,16 @@ test('reset gives the default and saves as null', () => {
 
 test('pairing: neighbouring half cards share a row, a lone half card takes the row', () => {
   const rows = pairRows(defaultLayout());
-  assert.deepEqual(rows, [['streak', 'retention'], ['rs'], ['cal'], ['perDay', 'forecast'], ['hardest', 'buttons'], ['hours', 'difficulty'], ['mastery']]);
+  assert.deepEqual(rows, [['streak', 'retention'], ['forecast', 'hardest'], ['cal'], ['rs'], ['perDay', 'buttons'], ['hours', 'difficulty'], ['mastery']]);
   // hide Time of day: Difficulty has no partner left and fills its row
   const l = setHidden(defaultLayout(), 'hours', true);
   const r2 = pairRows(l);
-  assert.deepEqual(r2.slice(4), [['hardest', 'buttons'], ['difficulty'], ['mastery']]);
+  assert.deepEqual(r2.slice(4), [['perDay', 'buttons'], ['difficulty'], ['mastery']]);
   const w = widths(l, visibleOrder(l));
   assert.equal(w.get('difficulty'), 'full'); assert.equal(w.get('buttons'), 'half');
   // a full card between two halves splits them
   const l2 = setSize(defaultLayout(), 'forecast', 'full');
-  assert.deepEqual(pairRows(l2).slice(3, 6), [['perDay'], ['forecast'], ['hardest', 'buttons']]);
+  assert.deepEqual(pairRows(l2).slice(1, 4), [['forecast'], ['hardest'], ['cal']]);
   // every row is one or two cards, and every card is in exactly one row
   for (const lay of [defaultLayout(), l, l2]) {
     const flat = pairRows(lay).flat();
@@ -123,7 +123,7 @@ test('a backup restores a cleaned layout and leaves junk out', async () => {
 
 // ---------- edit mode (v4.36) ----------
 test('which cards can change size: only those that work at both widths', () => {
-  assert.deepEqual(CARDS.filter(c => !canResize(c.id)).map(c => c.id), ['rs', 'cal']);
+  assert.deepEqual(CARDS.filter(c => !canResize(c.id)).map(c => c.id), ['cal', 'rs']);
   for (const c of CARDS) { assert.ok(c.sizes.includes(c.size), c.id + ': its default size is one of its sizes'); assert.ok(c.desc.length > 10, c.id + ' has a description'); }
   assert.equal(canResize('nope'), false);
 });

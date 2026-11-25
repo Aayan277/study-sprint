@@ -8,7 +8,8 @@ fs.mkdirSync(SP, { recursive: true });
 const browser = await chromium.launch();
 const errors = [];
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
-const IDS = ['streak', 'retention', 'rs', 'cal', 'perDay', 'forecast', 'hardest', 'buttons', 'hours', 'difficulty', 'mastery'];
+const OLD = ['streak', 'retention', 'rs', 'cal', 'perDay', 'forecast', 'hardest', 'buttons', 'hours', 'difficulty', 'mastery'];      // (the order before the Stats glance-first default: some checks need Reviews per day, Due in 7 days and Hardest in a row)
+const IDS = ['streak', 'retention', 'forecast', 'hardest', 'cal', 'rs', 'perDay', 'buttons', 'hours', 'difficulty', 'mastery'];
 const FIXED = ['rs', 'cal'];
 
 const open = async (ui, width, height, { motion = 'reduce', touch = width < 600 } = {}) => {
@@ -96,11 +97,11 @@ for (const ui of ['original', 'clinical']) {
   ok((await saved(p)) === null, `${tag}: nothing is saved until the drop`);
   await p.screenshot({ path: `${SP}/middrag-1440-${tag}.png` });
   await p.mouse.up();
-  await liveHas(p, 'Moved Time of day to position 5 of 11');
-  ok(true, `${tag}: announced "Moved Time of day to position 5 of 11"`);
-  ok(!(await p.$('.ed-ph')) && !(await p.$('.ed-unit.lifted')) && (await order(p)).indexOf('hours') === 4, `${tag}: the card lands, no placeholder is left (${(await order(p)).join()})`);
-  await p.waitForFunction(async () => (await (await import('./js/db.js')).getSettings()).statsLayout?.order.indexOf('hours') === 4);
-  ok((await saved(p)).order.indexOf('hours') === 4, `${tag}: the order is saved on the drop`);
+  await liveHas(p, 'Moved Time of day to position 7 of 11');
+  ok(true, `${tag}: announced "Moved Time of day to position 7 of 11"`);
+  ok(!(await p.$('.ed-ph')) && !(await p.$('.ed-unit.lifted')) && (await order(p)).indexOf('hours') === 6, `${tag}: the card lands, no placeholder is left (${(await order(p)).join()})`);
+  await p.waitForFunction(async () => (await (await import('./js/db.js')).getSettings()).statsLayout?.order.indexOf('hours') === 6);
+  ok((await saved(p)).order.indexOf('hours') === 6, `${tag}: the order is saved on the drop`);
   // Escape puts it back
   const before = (await order(p)).join();
   from = await grab(p, 'hardest');
@@ -122,9 +123,9 @@ for (const ui of ['original', 'clinical']) {
   ok((await order(p)).join() === before && !(await p.$('.ed-ph')), `${tag}: pointercancel puts the card back`);
   // edge auto-scroll: hold a card near the bottom of the window and the page scrolls
   await p.evaluate(() => scrollTo(0, 0));
-  from = await grab(p, 'rs');
+  from = await grab(p, 'streak');
   await p.evaluate(() => scrollTo(0, 0)); await p.waitForTimeout(60);
-  const f2 = await p.$eval('.ed-unit[data-card=rs]', e => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 60 }; });
+  const f2 = await p.$eval('.ed-unit[data-card=streak]', e => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 60 }; });
   await p.mouse.move(f2.x, f2.y); await p.mouse.down(); await p.mouse.move(f2.x + 5, f2.y + 20, { steps: 2 });
   await p.mouse.move(f2.x, 890, { steps: 4 });
   await p.waitForTimeout(600);
@@ -179,7 +180,7 @@ for (const ui of ['original', 'clinical']) {
 
   // ---------------- sizes and the empty slot ----------------
   p = await open(ui, 1440, 900);
-  await setLayout(p, { order: IDS, hidden: [], size: { forecast: 'full' } });      // Reviews per day is half, the card after it is full: a lone half card
+  await setLayout(p, { order: OLD, hidden: [], size: { forecast: 'full' } });      // Reviews per day is half, the card after it is full: a lone half card
   await stats(p);
   await edit(p);
   const lone = await p.evaluate(() => { const u = document.querySelector('.ed-unit[data-card=perDay]'), s = u.nextElementSibling, v = document.querySelector('main .view').getBoundingClientRect(); const r = u.getBoundingClientRect(), sr = s?.getBoundingClientRect(); return { slot: s?.classList.contains('ed-slot') && s.textContent.trim(), w: r.width, view: v.width, sameRow: sr && Math.abs(sr.top - r.top) < 2, right: sr && sr.left > r.left, aria: s?.getAttribute('aria-hidden') }; });
@@ -206,7 +207,7 @@ for (const ui of ['original', 'clinical']) {
   ok(paired.same && paired.right, `${tag}: a half card dropped on the slot pairs with the lone half card ${JSON.stringify(paired)} ${(await order(p)).join()}`);
   const savedSz = await saved(p);
   // outside edit mode a lone half card stretches
-  await setLayout(p, { order: IDS, hidden: [], size: { forecast: 'full', perDay: 'half' } });
+  await setLayout(p, { order: OLD, hidden: [], size: { forecast: 'full', perDay: 'half' } });
   await p.click('#edDone'); await p.waitForFunction(() => !document.querySelector('.ed-unit'));
   await stats(p);
   const out = await p.evaluate(() => { const c = document.querySelector('[data-card=perDay]'), v = document.querySelector('main .view').getBoundingClientRect(); return { w: c.getBoundingClientRect().width, view: v.width, slot: !!document.querySelector('.ed-slot') }; });
@@ -257,14 +258,14 @@ for (const ui of ['original', 'clinical']) {
   await stats(p);
   await edit(p);
   ok(await p.getAttribute('button[aria-label="Move Day streak earlier"]', 'aria-disabled') === 'true' && await p.getAttribute('button[aria-label="Move Mastery later"]', 'aria-disabled') === 'true', `${tag}: the first card cannot move earlier and the last cannot move later`);
-  await p.focus('button[aria-label="Move Hardest cards earlier"]'); await p.keyboard.press('Enter');
-  await liveHas(p, 'Moved Hardest cards to position 6 of 11');
-  ok((await order(p)).indexOf('hardest') === 5 && await p.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Move Hardest cards earlier'), `${tag}: Enter on Move earlier moves the card and keeps the focus on the button`);
+  await p.focus('button[aria-label="Move Reviews per day earlier"]'); await p.keyboard.press('Enter');
+  await liveHas(p, 'Moved Reviews per day to position 6 of 11');
+  ok((await order(p)).indexOf('perDay') === 5 && await p.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Move Reviews per day earlier'), `${tag}: Enter on Move earlier moves the card and keeps the focus on the button`);
   await p.keyboard.press('Space');
   await liveHas(p, 'position 5 of 11');
-  await p.focus('button[aria-label="Move Hardest cards later"]'); await p.keyboard.press('Enter');
-  await p.waitForFunction(async () => (await (await import('./js/db.js')).getSettings()).statsLayout?.order.indexOf('hardest') === 5);
-  ok((await saved(p)).order.indexOf('hardest') === 5, `${tag}: the keyboard moves are saved`);
+  await p.focus('button[aria-label="Move Reviews per day later"]'); await p.keyboard.press('Enter');
+  await p.waitForFunction(async () => (await (await import('./js/db.js')).getSettings()).statsLayout?.order.indexOf('perDay') === 5);
+  ok((await saved(p)).order.indexOf('perDay') === 5, `${tag}: the keyboard moves are saved`);
   await p.focus('button[aria-label="Make Answer buttons full width"]'); await p.keyboard.press('Enter');
   ok(await p.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Make Answer buttons half width'), `${tag}: the size badge toggles from the keyboard and keeps focus`);
   // Tab reaches every control in page order
@@ -401,7 +402,7 @@ for (const ui of ['original', 'clinical']) {
 
   // ---- a full card held over an empty slot: no blank cell, no stray slot
   p = await open(ui, 1440, 900);
-  await setLayout(p, { order: IDS, hidden: [], size: { forecast: 'full', hardest: 'full' } });
+  await setLayout(p, { order: OLD, hidden: [], size: { forecast: 'full', hardest: 'full' } });
   await stats(p); await edit(p);
   from = await grab(p, 'hardest');
   await p.mouse.move(from.x, from.y); await p.mouse.down(); await p.mouse.move(from.x + 5, from.y - 10, { steps: 3 });

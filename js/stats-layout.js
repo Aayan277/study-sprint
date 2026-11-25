@@ -5,7 +5,8 @@
 // null for the default. normaliseLayout() cleans anything it is given: unknown ids are ignored, a card added by a later version
 // shows up beside the card it follows in the default order, and a corrupt value gives the default.
 
-// The cards, in their default order. size is the default width on a wide screen (a phone always shows every card full width).
+// The cards, in their default order: the glance cards first (streak, retention, what is due this week, the hardest cards), the longer ones below.
+// size is the default width on a wide screen (a phone always shows every card full width).
 // sizes: the widths the card really works at (checked at 1024, 1280, 1440 and 1920 wide, in both styles). A card that lists only
 // 'full' has no size control anywhere and always shows full width: the Study calendar needs the whole row to show its year (a half
 // card drops the older weeks), and Retention vs target is a three-column table whose labels and tracks do not fit in half a row.
@@ -15,11 +16,11 @@ const BOTH = ['half', 'full'];
 export const CARDS = [
   { id: 'streak', name: 'Day streak', size: 'half', sizes: BOTH, desc: 'How many days in a row you have studied, with this week.' },
   { id: 'retention', name: 'Retention', size: 'half', sizes: BOTH, desc: 'How often you remembered cards in the last 30 days.' },
-  { id: 'rs', name: 'Retention vs target', size: 'full', sizes: ['full'], desc: 'Young and mature cards against your retention target.' },
-  { id: 'cal', name: 'Study calendar', size: 'full', sizes: ['full'], desc: 'A year of study days as a grid of squares.' },
-  { id: 'perDay', name: 'Reviews per day', size: 'half', sizes: BOTH, desc: 'Answers per day over the last 30 days.' },
   { id: 'forecast', name: 'Due in the next 7 days', size: 'half', sizes: BOTH, desc: 'How many cards come due each day this week.' },
   { id: 'hardest', name: 'Hardest cards', size: 'half', sizes: BOTH, desc: 'The cards you forget most, with a way to review them.' },
+  { id: 'cal', name: 'Study calendar', size: 'full', sizes: ['full'], desc: 'A year of study days as a grid of squares.' },
+  { id: 'rs', name: 'Retention vs target', size: 'full', sizes: ['full'], desc: 'Young and mature cards against your retention target.' },
+  { id: 'perDay', name: 'Reviews per day', size: 'half', sizes: BOTH, desc: 'Answers per day over the last 30 days.' },
   { id: 'buttons', name: 'Answer buttons', size: 'half', sizes: BOTH, more: true, desc: 'How often you press Again, Hard, Good and Easy.' },
   { id: 'hours', name: 'Time of day', size: 'half', sizes: BOTH, more: true, desc: 'When in the day you study and how well it goes.' },
   { id: 'difficulty', name: 'Difficulty', size: 'half', sizes: BOTH, more: true, desc: 'How hard your studied cards are, from easy to hard.' },

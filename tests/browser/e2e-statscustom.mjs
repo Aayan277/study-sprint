@@ -7,7 +7,7 @@ fs.mkdirSync(SP, { recursive: true });
 const browser = await chromium.launch();
 const errors = [];
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
-const DEFAULT = ['Day streak', 'Retention', 'Retention vs target', 'Study calendar', 'Reviews per day', 'Due in the next 7 days', 'Hardest cards', 'Answer buttons', 'Time of day', 'Difficulty', 'Mastery'];
+const DEFAULT = ['Day streak', 'Retention', 'Due in the next 7 days', 'Hardest cards', 'Study calendar', 'Retention vs target', 'Reviews per day', 'Answer buttons', 'Time of day', 'Difficulty', 'Mastery'];
 
 const open = async (ui, width, height) => {
   const ctx = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block', deviceScaleFactor: width < 600 ? 2 : 1, isMobile: width < 600, hasTouch: width < 600 });
@@ -48,18 +48,18 @@ for (const ui of ['original', 'clinical']) {
   await p.getByLabel('Show Difficulty').uncheck();
   await p.waitForFunction(() => ![...document.querySelectorAll('main[data-route=stats] .view .card h2')].some(h => h.textContent === 'Difficulty'));
   ok(!(await seen(p)).includes('Difficulty'), `${tag}: hiding Difficulty removes it from the page behind the sheet`);
-  // move Hardest cards up twice; the focus stays on the button, the live region says where it went
-  await p.click('button[aria-label="Move Hardest cards up"]');
-  await p.click('button[aria-label="Move Hardest cards up"]');
-  ok(await p.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Move Hardest cards up'), `${tag}: the focus stays on the pressed move button`);
-  await p.waitForFunction(() => document.querySelector('#slLive').textContent.includes('Hardest cards moved to position 5 of 11'));
-  ok(true, `${tag}: announced "Hardest cards moved to position 5 of 11"`);
-  ok((await p.$$eval('#slList .sl-row', r => r.map(x => x.dataset.id))).join() === 'streak,retention,rs,cal,hardest,perDay,forecast,buttons,hours,difficulty,mastery', `${tag}: the list shows the new order`);
+  // move Retention vs target down twice; the focus stays on the button, the live region says where it went
+  await p.click('button[aria-label="Move Retention vs target down"]');
+  await p.click('button[aria-label="Move Retention vs target down"]');
+  ok(await p.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Move Retention vs target down'), `${tag}: the focus stays on the pressed move button`);
+  await p.waitForFunction(() => document.querySelector('#slLive').textContent.includes('Retention vs target moved to position 8 of 11'));
+  ok(true, `${tag}: announced "Retention vs target moved to position 8 of 11"`);
+  ok((await p.$$eval('#slList .sl-row', r => r.map(x => x.dataset.id))).join() === 'streak,retention,forecast,hardest,cal,perDay,buttons,rs,hours,difficulty,mastery', `${tag}: the list shows the new order`);
   // keyboard: Enter on the down button
-  await p.focus('button[aria-label="Move Hardest cards down"]'); await p.keyboard.press('Enter');
-  await p.waitForFunction(() => document.querySelector('#slLive').textContent.includes('position 6 of 11'));
-  await p.focus('button[aria-label="Move Hardest cards up"]'); await p.keyboard.press('Space');
-  await p.waitForFunction(() => document.querySelector('#slLive').textContent.includes('position 5 of 11'));
+  await p.focus('button[aria-label="Move Retention vs target down"]'); await p.keyboard.press('Enter');
+  await p.waitForFunction(() => document.querySelector('#slLive').textContent.includes('position 9 of 11'));
+  await p.focus('button[aria-label="Move Retention vs target up"]'); await p.keyboard.press('Space');
+  await p.waitForFunction(() => document.querySelector('#slLive').textContent.includes('position 8 of 11'));
   ok(true, `${tag}: the move buttons work from the keyboard`);
   // the first card's Up button is inert
   ok(await p.getAttribute('button[aria-label="Move Day streak up"]', 'aria-disabled') === 'true', `${tag}: the first card cannot move up`);
@@ -70,16 +70,16 @@ for (const ui of ['original', 'clinical']) {
   await p.screenshot({ path: `${SP}/sheet-desktop-${tag}-after.png` });
   await p.click('#slDone'); await p.waitForFunction(() => !document.querySelector('#sheet').open); await leave(p);
   let order = await seen(p);
-  ok(JSON.stringify(order) === JSON.stringify(['Day streak', 'Retention', 'Retention vs target', 'Study calendar', 'Hardest cards', 'Reviews per day', 'Due in the next 7 days', 'Answer buttons', 'Time of day', 'Mastery']), `${tag} 1280: customised order on the page: ${order.join(' | ')}`);
+  ok(JSON.stringify(order) === JSON.stringify(['Day streak', 'Retention', 'Due in the next 7 days', 'Hardest cards', 'Study calendar', 'Reviews per day', 'Answer buttons', 'Retention vs target', 'Time of day', 'Mastery']), `${tag} 1280: customised order on the page: ${order.join(' | ')}`);
   const cal = await box(p, 'Study calendar'), per = await box(p, 'Reviews per day'), rs = await box(p, 'Retention vs target'), mast = await box(p, 'Mastery'), hard = await box(p, 'Hardest cards'), hrs = await box(p, 'Time of day'), btn = await box(p, 'Answer buttons');
-  ok(hard.w < rs.w * 0.6 && per.y === hard.y && hard.x < per.x && hard.y > cal.y, `${tag} 1280: Hardest cards moved up pairs with Reviews per day (${hard.w}px of ${rs.w}px)`);
+  ok(per.w < rs.w * 0.6 && per.y === btn.y && per.x < btn.x && per.y > cal.y && rs.y > per.y && hard.y < cal.y, `${tag} 1280: Retention vs target moved down leaves Reviews per day pairing with Answer buttons (${per.w}px of ${rs.w}px)`);
   ok(btn.y !== hrs.y && hrs.y === mast.y && hrs.x < mast.x && mast.w < rs.w * 0.6, `${tag} 1280: a half Mastery pairs with the half card before it (Time of day)`);
   await p.screenshot({ path: `${SP}/page-desktop-${tag}.png`, fullPage: true });
   // kept after a reload
   await p.reload(); await p.waitForSelector('main[data-route=stats] .pgrid');
   ok(JSON.stringify(await seen(p)) === JSON.stringify(order), `${tag} 1280: kept after a reload`);
   const s = await saved(p);
-  ok(s && s.hidden.join() === 'difficulty' && s.size.mastery === 'half' && s.order.indexOf('hardest') === 4, `${tag}: saved as one setting { order, hidden, size }`);
+  ok(s && s.hidden.join() === 'difficulty' && s.size.mastery === 'half' && s.order.indexOf('rs') === 7, `${tag}: saved as one setting { order, hidden, size }`);
   ok(await p.evaluate(async () => (await import('./js/sync-data.js')).SYNCED_SETTINGS.includes('statsLayout')), `${tag}: the setting is a synced one`);
   // reset asks first
   await openList(p);
@@ -119,14 +119,14 @@ for (const ui of ['original', 'clinical']) {
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${tag} 390: no sideways scroll with the sheet open`);
   await p.screenshot({ path: `${SP}/sheet-phone-${tag}.png` });
   await p.getByLabel('Show Difficulty').uncheck();
-  await p.click('button[aria-label="Move Hardest cards up"]'); await p.click('button[aria-label="Move Hardest cards up"]');
+  await p.click('button[aria-label="Move Retention vs target down"]'); await p.click('button[aria-label="Move Retention vs target down"]');
   await p.locator('.sl-row[data-id=mastery] label.chip', { hasText: 'Half' }).click();
   await p.waitForFunction(() => document.querySelector('#slList .sl-row[data-id=mastery] input[value=half]')?.checked);
   await p.waitForTimeout(150);
   await p.click('#slDone'); await p.waitForFunction(() => !document.querySelector('#sheet').open); await leave(p);
   // a phone keeps the "More stats" fold: Answer buttons, Time of day and Mastery are in it, after the cards that are not
   const d = await dom(p);
-  ok(d.join() === ['Day streak', 'Retention', 'Retention vs target', 'Study calendar', 'Hardest cards', 'Reviews per day', 'Due in the next 7 days', 'Answer buttons', 'Time of day', 'Mastery'].join(), `${tag} 390: page order: ${d.join(' | ')}`);
+  ok(d.join() === ['Day streak', 'Retention', 'Due in the next 7 days', 'Hardest cards', 'Study calendar', 'Reviews per day', 'Answer buttons', 'Retention vs target', 'Time of day', 'Mastery'].join(), `${tag} 390: page order: ${d.join(' | ')}`);
   await p.click('#moreBtn');
   const widths = await p.evaluate(() => [...document.querySelectorAll('main[data-route=stats] .view .card')].filter(c => c.offsetParent && !c.closest('.pgrid')).map(c => Math.round(c.getBoundingClientRect().width)));
   ok(widths.length >= 7 && new Set(widths).size === 1, `${tag} 390: every card is full width on a phone, whatever its size (${[...new Set(widths)]})`);
@@ -145,9 +145,9 @@ for (const ui of ['original', 'clinical']) {
   await openList(p);
   ok(await p.$eval('.sl-grip', e => e.getBoundingClientRect().height >= 44 && getComputedStyle(e).touchAction === 'none'), `${tag}: each row has a grip at least 44px tall with touch-action none`);
   ok(await p.$eval('#slList', e => getComputedStyle(e).touchAction !== 'none'), `${tag}: the rest of the list still scrolls by touch`);
-  // mouse: drag Time of day up three rows, above Due in the next 7 days
+  // mouse: drag Time of day up three rows, above Retention vs target
   await p.$eval('.sl-row[data-id=hours]', e => e.scrollIntoView({ block: 'center' }));
-  let from = await centre(p, '.sl-row[data-id=hours] .sl-grip'), to = await centre(p, '.sl-row[data-id=forecast]');
+  let from = await centre(p, '.sl-row[data-id=hours] .sl-grip'), to = await centre(p, '.sl-row[data-id=rs]');
   await p.mouse.move(from.x, from.y); await p.mouse.down();
   await p.mouse.move(from.x, from.y - 20, { steps: 3 });
   ok(await p.$eval('.sl-row[data-id=hours]', e => e.classList.contains('lifted')), `${tag}: the dragged row is lifted`);
@@ -165,7 +165,7 @@ for (const ui of ['original', 'clinical']) {
   from = await centre(p, '.sl-row[data-id=hardest] .sl-grip'); to = await centre(p, '.sl-row[data-id=hours]');
   await p.mouse.move(from.x, from.y); await p.mouse.down(); await p.mouse.move(to.x, to.y, { steps: 10 });
   await p.keyboard.press('Escape'); await p.mouse.up();
-  ok((await ids(p))[7] === 'hardest' && await p.evaluate(() => document.querySelector('#sheet').open), `${tag}: Escape while dragging puts the row back and keeps the sheet open`);
+  ok((await ids(p))[3] === 'hardest' && await p.evaluate(() => document.querySelector('#sheet').open), `${tag}: Escape while dragging puts the row back and keeps the sheet open`);
   await p.reload(); await p.waitForSelector('main[data-route=stats] .pgrid');
   ok((await seen(p)).indexOf('Time of day') === 5, `${tag}: the dragged order persists after a reload`);
   await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('statsLayout', null); });
@@ -185,7 +185,7 @@ for (const ui of ['original', 'clinical']) {
   });
   await p.waitForFunction(() => /Moved Reviews per day to position \d+ of 11/.test(document.querySelector('#slLive').textContent));
   const t = await ids(p);
-  ok(t.indexOf('perDay') <= 2, `${tag} 390: a touch drag moves the row (${t.slice(0, 4)})`);
+  ok(t.indexOf('perDay') <= 5, `${tag} 390: a touch drag moves the row (${t.slice(0, 4)})`);
   // a cancelled pointer puts it back
   await p.$eval('.sl-row[data-id=hardest]', e => e.scrollIntoView({ block: 'center' }));
   const before = (await ids(p)).join();
@@ -197,7 +197,7 @@ for (const ui of ['original', 'clinical']) {
   ok((await ids(p)).join() === before, `${tag} 390: pointercancel puts the row back`);
   await p.click('#slDone'); await p.waitForTimeout(200);
   await p.reload(); await p.waitForSelector('main[data-route=stats] .pgrid');
-  ok((await dom(p)).indexOf('Reviews per day') <= 2, `${tag} 390: the touch-dragged order persists after a reload`);
+  ok((await dom(p)).indexOf('Reviews per day') <= 5, `${tag} 390: the touch-dragged order persists after a reload`);
   await p.context().close();
 
   // ---------------- closing the sheet in the middle of a drag ----------------
