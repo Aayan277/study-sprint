@@ -92,7 +92,7 @@ ok(rows.map(r => r.key).join() === 'sample,bio,org,eco,neu,spa,lin', 'the list i
 ok(rows.find(r => r.key === 'org').due === '4' && rows.find(r => r.key === 'eco').due === '6' && rows.find(r => r.key === 'lin').due === '0', 'each row shows its due count');
 ok(rows.find(r => r.key === 'bio').stripe === 'rgb(70, 167, 88)', 'each row has its deck colour stripe');
 ok((await p.textContent('.side-decks')).includes('New deck'), 'the list ends with "+ New deck"');
-ok((await p.getAttribute('.side-deck[data-key=org]', 'aria-label')).includes('4 cards due') && (await p.getAttribute('.side-deck[data-key=org]', 'aria-label')).includes('exam in 2 days'), 'a row says its due count and exam to a screen reader');
+ok((await p.getAttribute('.side-deck[data-key=org]', 'aria-label')).includes('4 due') && (await p.getAttribute('.side-deck[data-key=org]', 'aria-label')).startsWith('Study') && (await p.getAttribute('.side-deck[data-key=org]', 'aria-label')).includes('exam in 2 days'), 'a row says its due count and exam to a screen reader');
 
 // clicking a deck opens it and highlights it
 await p.click('.side-deck[data-key=eco] .side-due'); await p.waitForSelector('main[data-route=deck]');

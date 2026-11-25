@@ -107,9 +107,9 @@ async function paint(loaded) {
     const cc = countFor(data, [d.id]), due = cc.due, info = examInfo(d);
     const show = info && info.daysLeft <= EXAM_PILL_DAYS;
     const soon = show && badgeClass(info).includes('soon');
-    const label = [cc.total ? `Study ${d.name}` : d.name, plural(due, 'card') + ' due', info ? countdown(info).toLowerCase() : ''].filter(Boolean).join(', ');
+    const label = (cc.total ? [`Study ${d.name}`, `${plural(cc.total, 'card')}: ${due} due, ${cc.fresh} new`, info ? countdown(info).toLowerCase() : ''] : [d.name, plural(due, 'card') + ' due', info ? countdown(info).toLowerCase() : '']).filter(Boolean).join(', ');
     const tip = [d.name, `${due.toLocaleString('en')} due`, info ? short(info.daysLeft) : ''].filter(Boolean).join(' · ');
-    return `<a class="side-deck" data-key="${esc(d.id)}" href="#/deck/${esc(d.id)}"${cc.total ? ' data-study' : ''} style="--deck:${esc(d.color)}" aria-label="${esc(label)}" data-tip="${esc(tip)}"${show ? ` data-exam="${soon ? 'soon' : 'on'}"` : ''}>
+    return `<a class="side-deck" data-key="${esc(d.id)}" href="#/deck/${esc(d.id)}"${cc.total ? ' data-study aria-keyshortcuts="Shift+Enter"' : ''} style="--deck:${esc(d.color)}" aria-label="${esc(label)}" data-tip="${esc(tip)}"${show ? ` data-exam="${soon ? 'soon' : 'on'}"` : ''}>
       <span class="side-name">${esc(d.name)}</span>
       ${show ? `<span class="side-exam${soon ? ' soon' : ''}" aria-hidden="true">${short(info.daysLeft)}</span>` : ''}
       <span class="side-due${due ? '' : ' zero'}" aria-hidden="true"${cc.total ? ' title="Open deck page"' : ''}>${due}</span></a>`;
@@ -242,6 +242,13 @@ export function initSidebar() {
 
   // + New deck: the deck editor is loaded the first time it is needed.
   // A deck with something to study starts studying on a tap; the due count opens its page (and so does a deck with nothing to study).
+  // Keyboard path to the deck page (also in the collapsed sidebar): Shift+Enter, the Menu key or Shift+F10 on a deck row.
+  $('sideList').addEventListener('keydown', e => {
+    const row = e.target.closest?.('a.side-deck[data-key]');
+    if (!row || !((e.key === 'Enter' && e.shiftKey) || e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey))) return;
+    e.preventDefault();
+    navGo(`#/deck/${row.dataset.key}`);
+  });
   $('sideList').addEventListener('click', async e => {
     const row = e.target.closest('a.side-deck[data-study]');
     if (row && !e.target.closest('.side-due') && !(e.metaKey || e.ctrlKey || e.shiftKey || e.button)) {

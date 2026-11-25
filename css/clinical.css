@@ -108,7 +108,6 @@
 :root[data-ui="clinical"] .td-go .ico,
 :root[data-ui="clinical"] .deck-go{background:var(--surface-1);box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--text-2)}
 @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .tdeck:hover .td-go .ico,:root[data-ui="clinical"] .deck-go:hover{color:var(--accent-text);box-shadow:inset 0 0 0 1px var(--accent)}}
-:root[data-ui="clinical"] .deck-go.lead{background:var(--accent);color:var(--on-accent);box-shadow:none}
 :root[data-ui="clinical"] :is(.tdeck.done .td-go .ico,.deck-go.done){background:none;box-shadow:inset 0 0 0 1px var(--line);color:var(--good)}
 /* Exams: quiet outlined badge, amber text */
 :root[data-ui="clinical"] .exam-badge{background:none;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--exam);font-weight:550;border-radius:var(--r-xs)}
@@ -517,7 +516,7 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .switch{border-radius:4px}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .switch::after{border-radius:2px}
 /* no icons inside text buttons (Start, Options); icon-only buttons keep theirs */
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.today-hero .btn.big,#optBtn,#resumeBtn) .ico{display:none}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.today-hero .btn.big,#optBtn) .ico{display:none}
 /* phones: the freeze note gets its own line rather than wrapping after a stray "·" */
 @media (max-width:1023px){
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak .frz-pill{flex-basis:100%}
@@ -539,6 +538,7 @@
 
 /* ---------- Decks: one ruled list ---------- */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .decks{gap:0;box-shadow:0 0 0 1px var(--line-strong);border-radius:var(--r-md);overflow:hidden}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .decks:has(.deck-menu:not([hidden])){overflow:visible}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck{box-shadow:none!important;border-radius:0}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck + .deck{box-shadow:inset 0 1px 0 var(--line)!important}
 
@@ -863,9 +863,8 @@
 
   /* 2. nothing outlined inside a row: status tags and the row's own buttons are coloured words */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.st-due,.st-new,.st-learning,.st-buried,.st-review,.st-suspended){box-shadow:none;background:none;padding:0}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go:not(.lead){box-shadow:none!important;background:none;color:var(--accent-text);padding:0 4px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go{box-shadow:none!important;background:none;color:var(--accent-text);padding:0 4px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go{height:44px;min-width:56px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go.lead{height:44px;margin-block:0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .deck .icon-btn{min-width:44px;min-height:44px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-row .btn.ghost{border-color:transparent;background:none;color:var(--accent-text);padding-inline:var(--s-2);min-height:44px}
 

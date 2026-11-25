@@ -126,15 +126,15 @@ export async function renderLibrary(el) {
   let searchTimer = 0;
 
   // One deck's tile. `q` is the search text (compact only): a course that matches only through a subdeck shows just those subdecks.
-  const tile = (item, q = '', first = false) => {
-    const { deck, stats } = item; const c = cnt(deck.id), go = c.total; const learned = stats.total ? (stats.young + stats.mature) / stats.total : 0;
+  const tile = (item, q = '') => {
+    const { deck, stats } = item; const c = cnt(deck.id), go = c.total; const safe = deck.id.replace(/[^\w-]/g, '_'); const learned = stats.total ? (stats.young + stats.mature) / stats.total : 0;
     return `
       <article class="deck" style="--deck:${esc(deck.color)}">
-        <a class="deck-open" href="#/deck/${esc(deck.id)}" data-open="${esc(deck.id)}"${go ? ` data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}"` : ''}>
+        <a class="deck-open" href="#/deck/${esc(deck.id)}" data-open="${esc(deck.id)}"${go ? ` data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}" aria-describedby="dx-${safe} dc-${safe}"` : ''}>
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
           <span class="deck-name">${esc(deck.name)}</span>
-          ${examInfo(deck) ? `<span class="${badgeNear(examInfo(deck))}">${esc(countdown(examInfo(deck)))}</span>` : ''}
-          <span class="deck-counts">
+          ${examInfo(deck) ? `<span id="dx-${safe}" class="${badgeNear(examInfo(deck))}">${esc(countdown(examInfo(deck)))}</span>` : ''}
+          <span class="deck-counts" id="dc-${safe}">
             ${stats.total ? `<span><b>${stats.total.toLocaleString('en')}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
             <span class="due${c.due ? "" : " zero"}"><b>${c.due.toLocaleString('en')}</b> due</span>
             <span><b>${c.fresh.toLocaleString('en')}</b> new</span>
@@ -213,8 +213,7 @@ export async function renderLibrary(el) {
   const drawGrid = () => {
     if (!grid?.isConnected) return;
     const { q, rows } = shown();
-    const firstDue = view.sort === 'due' ? rows.find(x => cnt(x.deck.id).total) : null;
-    grid.innerHTML = rows.map(x => tile(x, q, x === firstDue)).join('');
+    grid.innerHTML = rows.map(x => tile(x, q)).join('');
     const total = view.hits ? top.reduce((n, x) => n + (view.hits.get(x.deck.id) || 0), 0) : 0;
     const html = total ? `<button class="link" type="button" id="showHits">Show ${total.toLocaleString('en')} matching ${total === 1 ? 'card' : 'cards'}</button>` : '';
     if (hitsLive && hitsLive.dataset.src !== html) { hitsLive.dataset.src = html; hitsLive.innerHTML = html; }      // only when it changed, so sort clicks are not announced again
@@ -267,7 +266,13 @@ export async function renderLibrary(el) {
       const menu = more.parentElement.querySelector('.deck-menu');
       closeMenus(menu);
       menu.hidden = !menu.hidden; more.setAttribute('aria-expanded', String(!menu.hidden));
-      if (!menu.hidden) menu.querySelector('[role=menuitem]').focus();
+      if (!menu.hidden) {
+        // right under its ⋯ button (not over it), measured from the tile
+        const t = more.closest('.deck').getBoundingClientRect(), b = more.getBoundingClientRect();
+        menu.style.top = `${Math.round(b.bottom - t.top + 4)}px`; menu.style.right = `${Math.max(4, Math.round(t.right - b.right))}px`;
+        menu.querySelector('[role=menuitem]').focus();
+        menu.scrollIntoView({ block: 'nearest' });
+      }
       return;
     }
     if (page || edit) { const m = (page || edit).closest('.deck-menu'); closeMenus(); m.parentElement.querySelector('[data-more]').focus(); }
@@ -290,7 +295,9 @@ export async function renderLibrary(el) {
     else if (e.key === 'Tab') closeMenus();
   });
   const outsideMenu = e => { if (!grid?.isConnected) { document.removeEventListener('pointerdown', outsideMenu, true); return; } if (!e.target.closest('.deck-menu, [data-more]')) closeMenus(); };
+  el._stopMenu?.();                       // (a redraw of this screen must not leave the last listener behind)
   document.addEventListener('pointerdown', outsideMenu, true);
+  el._stopMenu = () => document.removeEventListener('pointerdown', outsideMenu, true);
   // 'toggle' doesn't bubble, so it is caught on the way down. A fold the search opened is not remembered.
   grid?.addEventListener('toggle', e => {
     const d = e.target;
