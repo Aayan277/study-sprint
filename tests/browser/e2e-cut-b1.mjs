@@ -44,7 +44,7 @@ ok(await p.evaluate(() => !document.getElementById('toast').hidden), 'a toast sh
 // Review: first focus is the Show answer button, which is described by the question; the counts have words.
 ok(await p.evaluate(() => document.activeElement?.id === 'showBtn' && document.getElementById('showBtn').getAttribute('aria-describedby') === 'rvQ'), 'Review: first focus is #showBtn, described by the question');
 const counts = (await p.locator('.rv-counts').ariaSnapshot()).replace(/\s+/g, ' ');
-ok(/New \d+ Learn \d+ Due \d+/.test(counts) && !/\b(New|Learn|Due) \1\b/.test(counts), 'Review: the counts read "New n Learn n Due n" once each for screen readers: ' + counts);
+ok(/\d+ left: \d+ new, \d+ learning, \d+ due/.test(counts), 'Review: the count reads "N left: n new, n learning, n due" for screen readers: ' + counts);
 ok(await p.locator('.flash-hint, #longNote').count() === 0, 'Review: no hint line or flip note under the card');
 await p.keyboard.press('Space'); await p.waitForSelector('#flash.flipped');
 ok(await p.evaluate(() => document.activeElement?.classList.contains('rv-back')), 'Review: after Space the answer has focus');

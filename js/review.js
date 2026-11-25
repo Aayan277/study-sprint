@@ -260,16 +260,25 @@ function nextCard(el) {
   warmCards([...R.queue.slice(0, 3), ...R.waiting.slice(0, 1)].map(x => x.card));      // the next cards' pictures and sounds, if this device lacks them
 }
 
-// Cards left, split like Anki: new · learning · review. The current card's kind is underlined.
-function countsHTML() {
+// Cards left: one count in the bar ("84 left"). The split like Anki (new · learning · due) stays in the DOM (the three numbers, the
+// current card's kind marked .now) and is told in the tooltip and the aria-label.
+function countsParts() {
   const all = [...R.queue, ...R.waiting];
   const n = k => all.filter(x => x.kind === k).length + (R.current?.kind === k ? 1 : 0);
+  const parts = { new: n('new'), learn: n('learn'), review: n('review') };
+  return { ...parts, total: parts.new + parts.learn + parts.review };
+}
+function countsHTML() {
+  const c = countsParts();
   const cls = k => (R.current?.kind === k ? ' now' : '');
-  // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label, so the
-  // text inside each span stays just the number.
-  return `<span class="c-new${cls('new')}" data-label="New">${n('new')}</span>
-    <span class="c-learn${cls('learn')}" data-label="Learn" data-short="Lrn">${n('learn')}</span>
-    <span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
+  return `<span class="c-new${cls('new')}">${c.new}</span>
+    <span class="c-learn${cls('learn')}">${c.learn}</span>
+    <span class="c-rev${cls('review')}">${c.review}</span>`;
+}
+function countsAttrs() {
+  const c = countsParts();
+  const now = { new: 'New', learn: 'Learn', review: 'Due' }[R.current?.kind];
+  return `data-left="${c.total.toLocaleString('en')} left" aria-label="${c.total.toLocaleString('en')} left: ${c.new} new, ${c.learn} learning, ${c.review} due" data-hint="New ${c.new} · Learn ${c.learn} · Due ${c.review}${now ? ` · This card: ${now}` : ''}"`;
 }
 
 // The face that is turned away is hidden from screen readers and can't be focused or tabbed to (inert).
@@ -336,7 +345,7 @@ function renderSession(el, enter = false) {
   const head = `
     <h1 class="sr-only">Review</h1>
     <div class="rv-head">
-      <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
+      <div class="rv-counts mono" role="group" ${countsAttrs()}>${countsHTML()}</div>
       ${R.undo.length ? `<button class="link" type="button" id="undoBtn" aria-label="Undo" data-hint="Undo the last answer"${singleKeysOn() ? ' data-hint-key="Z"' : ''}>${icon('undo')}</button>` : ''}
       <button class="link" type="button" id="scratchBtn" aria-pressed="${scratchPref()}" aria-keyshortcuts="D" aria-label="Scratchpad${singleKeysOn() ? ' (D)' : ''}" data-hint="Scratchpad"${singleKeysOn() ? ' data-hint-key="D"' : ''}>${PEN_ICON}</button>
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more" data-hint="More">${icon('more')}</button>

@@ -143,7 +143,6 @@
 :root[data-ui="clinical"] .flash-back{font-family:var(--f-read);font-weight:400;letter-spacing:0;color:var(--text)}
 :root[data-ui="clinical"] .flash-deck{color:var(--text-2)}
 :root[data-ui="clinical"] .rv-prog i{box-shadow:none}
-:root[data-ui="clinical"] .rv-counts .now{background:var(--surface-2)}
 :root[data-ui="clinical"] .ratebar{background:var(--bg)}
 :root[data-ui="clinical"] .rates{gap:8px}
 :root[data-ui="clinical"] .rate{background:var(--surface-1);border-color:var(--line-strong);gap:2px}
@@ -510,8 +509,7 @@
 }
 
 /* ---- review: square corners, plain counts ---- */
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-counts,
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-counts .now{border-radius:var(--r-sm)}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-counts{border-radius:var(--r-sm)}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rate kbd,:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rate i{border-radius:2px}
 
 /* ---- stats: square marks ---- */
