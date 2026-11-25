@@ -3483,3 +3483,5 @@ main h2[tabindex="-1"]{outline:none}
 
 /* Computer, Original style: the sidebar already lists the decks (a tap starts one), so Today does not repeat them. Phones and Clinical keep the list. */
 @media (min-width:1024px){:root:not([data-ui="clinical"]) main[data-route="today"] section[aria-labelledby="tdTitle"]{display:none}}
+.fin-missed{display:flex;align-items:center;gap:var(--s-3);margin:var(--s-3) 0 0;font-size:var(--fs-sm);color:var(--text-2)}
+.fin-missed b{color:var(--text);font-weight:600}

@@ -910,6 +910,10 @@ async function finish(el) {
     return inScope.has(c.deckId) && st && st.state !== NEW && st.due <= tomorrowEnd;
   }).length;
   const streak = await loadStreak(null, { settings: R.settings });
+  // Cards rated Again in this session (from the answers kept for Undo; nothing is stored). "Go over these" is the same custom session as
+  // Study by tag or "Review these": a queue of exactly these cards (suspended or buried ones, such as a new leech, are left out of it).
+  const missedIds = [...new Set(R.undo.filter(u => u.again).map(u => u.item.card.id))];
+  const missedLeft = missedIds.length ? customQueue('ids', data, countFor(data, allIds).cards, 3, missedIds).queue.length : 0;
   // You may have switched to another screen while that loaded: don't draw over it.
   if (!R || !location.hash.startsWith('#/review')) return;
   if (reviewed) noteSession();            // a finished session: Today may now offer to install the app (install.js)
@@ -926,6 +930,7 @@ async function finish(el) {
       <div><div class="v">${spentText}</div><div class="l">Time spent</div></div>
       <div><div class="v">${dueTomorrow}</div><div class="l">Due tomorrow</div></div>
     </div>
+    <p class="fin-missed"><b>${missedIds.length} missed</b>${missedLeft ? ' <button class="btn ghost small" type="button" id="missedBtn">Go over these</button>' : ''}</p>
     ${reviewed > cardsDone ? `<p class="note">${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}.</p>` : ''}
     <div class="res-actions">
       ${goOn
@@ -946,6 +951,13 @@ async function finish(el) {
     await startStudy({ deckIds: goOn.ids });
     // Today's Start with one deck goes to #/review/<deck>: the address we are already on, so nothing would redraw. Do it here.
     if (location.hash === before && el.isConnected) renderReview(el, goOn.ids.length === 1 ? goOn.ids[0] : undefined);
+  });
+  $('missedBtn')?.addEventListener('click', async () => {
+    R = null; publishLive();
+    const { startStudy } = await import('./today.js');
+    const before = location.hash;
+    await startStudy({ kind: 'ids', cardIds: missedIds, label: 'Missed cards' });
+    if (location.hash === before && el.isConnected) renderReview(el);       // (the same address: nothing would redraw)
   });
   $('undoLast')?.addEventListener('click', () => undo(el));
   const slot = $('finishMore'), cardIds = [...R.answered], leechIds = [...R.leeches];
