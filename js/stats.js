@@ -392,7 +392,7 @@ export async function renderStats(el) {
     rs: () => `
     <section class="card section rs-card" aria-labelledby="rsTitle">
       <div class="mhead"><h2 id="rsTitle">Retention vs target</h2>
-        <div class="deck-sort rs-win" role="group" aria-label="Time window">${RS_PERIODS.map(d => `<button type="button" data-rsw="${d}" aria-pressed="${d === savedRsWindow()}" aria-label="Last ${d} days">${d}d</button>`).join('')}</div></div>
+        <div class="deck-sort rs-win" role="group" aria-label="Time window">${RS_PERIODS.map(d => `<button type="button" data-rsw="${d}" aria-pressed="${d === savedRsWindow()}" aria-label="${d}d, last ${d} days">${d}d</button>`).join('')}</div></div>
       <div id="retSplit"><p class="muted">Working it out…</p></div>
     </section>`,
     cal: () => calendarHTML(D.cal, now),

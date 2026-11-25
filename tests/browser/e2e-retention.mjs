@@ -209,6 +209,7 @@ for (const [w, h, ui, mode] of LOOKS) {
     await p.click(`[data-rsw="${d}"]`);
     ok(new RegExp(`Last ${d} days`).test(await p.textContent('#retSplit')) && (await p.locator('#retSplit .rs-group').count()) === 1 && (await p.getAttribute(`[data-rsw="${d}"]`, 'aria-pressed')) === 'true', `${tag}: the ${d}d button shows the last ${d} days`);
   }
+  ok((await p.getAttribute('[data-rsw="7"]', 'aria-label')).startsWith('7d') && (await p.getAttribute('[data-rsw="7"]', 'aria-label')).includes(await p.textContent('[data-rsw="7"]')), `${tag}: the switch's accessible name contains its visible text`);
   await p.reload(); await p.waitForSelector('#retSplit .rs-group', { timeout: 15000 });
   ok(/Last 90 days/.test(await p.textContent('#retSplit')) && (await p.getAttribute('[data-rsw="90"]', 'aria-pressed')) === 'true', `${tag}: the choice is remembered`);
   ok((await p.locator('#retSplit .rs-dot').count()) >= 2, `${tag}: a dot for each row with reviews`);

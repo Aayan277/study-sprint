@@ -3490,3 +3490,4 @@ main h2[tabindex="-1"]{outline:none}
 .chart-table > summary{color:var(--text-2);font-size:var(--fs-xs);font-weight:500}
 .th-fresh{margin:calc(var(--s-2) * -1) 0 var(--s-4)}
 .th-fresh .link{color:var(--text-2);padding-left:0}
+@media (forced-colors:active){.deck-sort [aria-pressed="true"]{outline:2px solid Highlight;outline-offset:-2px}}
