@@ -69,7 +69,7 @@ const shoot = async (name, w, h, scale, go) => {
   await ctx.addInitScript(() => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); localStorage.setItem('study-sprint-theme', JSON.stringify({ skin: 'violet', mode: 'dark' })); } catch { /* fine */ } });
   const page = await ctx.newPage();
   await page.goto(URL_); await page.waitForSelector('.today-hero');
-  await seed(page); await page.reload(); await page.waitForSelector('.tdeck');
+  await seed(page); await page.reload(); await page.waitForSelector('.tdeck', { state: 'attached' });
   await go(page);
   await page.waitForTimeout(500);                       // let fonts and the goal ring settle
   await page.screenshot({ path: path.join(OUT, name + '.png') });

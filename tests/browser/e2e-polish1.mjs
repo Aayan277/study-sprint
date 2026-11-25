@@ -94,7 +94,7 @@ ok(await p.$eval('.hard-list .n', e => !/Mono/i.test(getComputedStyle(e).fontFam
 const d = await open(1440, 900);
 await d.goto('http://localhost:8123/#/decks'); await d.waitForSelector('.deck');
 const edges = {};
-for (const [n, h, s] of [['today', '#/today', '.tdeck'], ['decks', '#/decks', '.deck'], ['stats', '#/stats', '.card'], ['play', '#/play', '#startBtn'], ['settings', '#/settings', '#skins'], ['browse', '#/browse', '.crow-btn']]) {
+for (const [n, h, s] of [['today', '#/today', '.today-hero'], ['decks', '#/decks', '.deck'], ['stats', '#/stats', '.card'], ['play', '#/play', '#startBtn'], ['settings', '#/settings', '#skins'], ['browse', '#/browse', '.crow-btn']]) {
   await go(d, h, s);
   edges[n] = await d.evaluate(() => { const v = document.querySelector('main > .view'), r = v.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(v.querySelector('h1').getBoundingClientRect().left)]; });
 }

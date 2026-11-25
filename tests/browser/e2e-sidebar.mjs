@@ -188,7 +188,7 @@ await go(p, '#/today', '#startBtn');
 
 // a Review round refreshes the sidebar (counts and ring)
 const before = { badge: +(await p.textContent('#sideBadge > [aria-hidden]')), eco: await p.textContent('.side-deck[data-key=eco] .side-due') };
-await p.click('[data-start="eco"]'); await p.waitForSelector('#flash');
+await p.click('a.side-deck[data-key=eco]'); await p.waitForSelector('#flash');
 for (let i = 0; i < 6; i++) { await p.keyboard.press('Space'); await p.keyboard.press('3'); await p.waitForTimeout(60); }
 await p.waitForSelector('.stats4');
 await p.waitForFunction(() => document.querySelector('.side-deck[data-key=eco] .side-due').classList.contains('zero'));

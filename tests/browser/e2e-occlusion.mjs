@@ -57,7 +57,7 @@ const seed = await page.evaluate(async big => {
 ok(seed.ids.length === 3 && seed.fronts[1] === 'Heart anatomy: hidden part 2 of 3' && seed.backs.join('|') === 'Aorta|Left ventricle|' && seed.w === 2048 && seed.backImage, 'saved 3 sibling cards with fallback front/back, the picture in backImage and w 2048');
 
 // ---- 3. Review ----
-await page.goto(URL + '#/today'); await page.waitForSelector('.tdeck');
+await page.goto(URL + '#/today'); await page.waitForSelector('.tdeck', { state: 'attached' });
 await page.locator(`[data-start="${seed.deckId}"]`).click(); await page.waitForSelector('#flash');
 ok((await page.textContent('.rv-counts .c-new')) === '1', 'Review shows 1 of the 3 siblings (one a day)');
 await page.waitForSelector('.rv-front .occ-img[src]', { timeout: 5000 });
@@ -133,7 +133,7 @@ ok((await page.textContent('.stats4')).includes('1'), 'rated: the other two sibl
 
 // typed answers only for labelled boxes
 await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewTyping', true); });
-await page.goto(URL + '#/today'); await page.waitForSelector('.tdeck');
+await page.goto(URL + '#/today'); await page.waitForSelector('.tdeck', { state: 'attached' });
 const d5 = new Date(Date.now() + 5 * 864e5), ymd = `${d5.getFullYear()}-${String(d5.getMonth() + 1).padStart(2, '0')}-${String(d5.getDate()).padStart(2, '0')}`;
 await page.evaluate(async ([deckId, ymd]) => {
   const db = await import('./js/db.js'), sd = await import('./js/study-data.js');
@@ -403,8 +403,8 @@ const dseed = await desk.evaluate(async () => {
   await db.saveNote(occ.planOcclusionSave([], { masks, header: 'Desk', w: info.width, h: info.height, image: info.id }), { deckId: deck.id, noteId: db.newId(), tags: [] });
   return deck.id;
 });
-await desk.goto(URL + '#/today'); await desk.waitForSelector('.tdeck');
-await desk.locator(`[data-start="${dseed}"]`).click(); await desk.waitForSelector('#flash .occ-img[src]');
+await desk.goto(URL + '#/today'); await desk.waitForSelector('.tdeck', { state: 'attached' });
+await desk.locator(`a.side-deck[data-key="${dseed}"]`).click(); await desk.waitForSelector('#flash .occ-img[src]');
 await desk.screenshot({ path: SP + '/occ-review-desk.png' });
 await noSideways(desk, 'on the desktop Review');
 const fw = await desk.locator('.rv-front .occ').boundingBox();

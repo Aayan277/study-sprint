@@ -31,7 +31,7 @@ async function seed(p, n, { withExam = false } = {}) {
     const cs = await db.getAll('cards');
     await db.putMany('cardStates', cs.map(c => ({ cardId: c.id, due: now - D, stability: 4, difficulty: 5, elapsedDays: 3, scheduledDays: 3, learningSteps: 0, reps: 3, lapses: 0, state: 2, lastReview: now - 4 * D })));
   }, { n, withExam });
-  await p.reload(); await p.waitForSelector('.tdeck');
+  await p.reload(); await p.waitForSelector('.tdeck', { state: 'attached' });
 }
 const waitClosed = p => p.waitForFunction(() => !document.getElementById('sheet').open);
 

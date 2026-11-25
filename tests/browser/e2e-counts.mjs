@@ -57,7 +57,7 @@ let { ctx, p } = await open(1440, 900);
 await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
 await seed(p);
 
-await go(p, '#/today', '.tdeck');
+await go(p, '#/today', '.today-hero');
 const todayBio = await num(p, '.tdeck[data-start="Bio"] .due b');
 const sideBio = await num(p, '.side-deck[data-key="Bio"] .side-due');
 await go(p, '#/decks', '.deck');
@@ -87,7 +87,7 @@ ok(/min/.test(await p.textContent('#startBtn')), 'the Start button still gives t
 // ======================= daily limit and shared limits =======================
 await setDeck(p, 'Bio', { reviewPerDay: 5 });
 await setDeck(p, 'Chem', { reviewPerDay: 4 });
-await go(p, '#/today', '.tdeck');
+await go(p, '#/today', '.today-hero');
 const t2 = [await num(p, '.tdeck[data-start="Bio"] .due b'), await num(p, '.tdeck[data-start="Chem"] .due b'), await num(p, '[data-count=due]')];
 ok(JSON.stringify(t2) === '[5,4,9]', 'with a limit of 5 and 4 the numbers are 5, 4 and 9 in all: ' + t2);
 await go(p, '#/deck/Chem', '.deck-summary');

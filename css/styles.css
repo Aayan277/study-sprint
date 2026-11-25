@@ -3480,3 +3480,6 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) main[data-route="decks"] .decks.compact .deck .add-cards-btn{min-height:36px}
   :root:not([data-ui="clinical"]) main[data-route="decks"] .decks.compact .deck .add-cards-btn:hover{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--text)}
 }
+
+/* Computer, Original style: the sidebar already lists the decks (a tap starts one), so Today does not repeat them. Phones and Clinical keep the list. */
+@media (min-width:1024px){:root:not([data-ui="clinical"]) main[data-route="today"] section[aria-labelledby="tdTitle"]{display:none}}

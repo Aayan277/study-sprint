@@ -41,7 +41,7 @@ async function seed(p, studied) {
     for (let d = 7; d < 30; d++) for (let i = 0; i < 3; i++) logs.push({ cardId: cs[(d + i) % cs.length].id, timestamp: daysAgoStart(d, now) + 10 * 3600000 + i * 60000, source: 'review', mode: 'flip', correct: (d + i) % 5 !== 0, ms: 3000, rating: (d + i) % 5 !== 0 ? 3 : 1, state: 2, applied: true, reason: 'due' });
     await db.putMany('reviewLog', logs);
   }, studied);
-  await p.reload(); await p.waitForSelector('.tdeck');
+  await p.reload(); await p.waitForSelector('.tdeck', { state: 'attached' });
 }
 const go = async (p, hash, sel) => { await p.goto(URL + hash); await p.waitForSelector(sel); await p.waitForTimeout(250); };
 const norm = async (p, sel) => (await p.textContent(sel)).replace(/\s+/g, ' ').trim();

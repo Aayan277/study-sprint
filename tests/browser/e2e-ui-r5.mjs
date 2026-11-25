@@ -32,7 +32,7 @@ async function seed(p, nExtra = 5) {
     const cs = await db.getAll('cards');
     await db.putMany('cardStates', cs.map(c => ({ cardId: c.id, due: now - D, stability: 4, difficulty: 5, elapsedDays: 3, scheduledDays: 3, learningSteps: 0, reps: 3, lapses: 0, state: 2, lastReview: now - 4 * D })));
   }, nExtra);
-  await p.reload(); await p.waitForSelector('.tdeck');
+  await p.reload(); await p.waitForSelector('.tdeck', { state: 'attached' });
 }
 const go = async (p, hash, sel) => { await p.goto(URL + hash); await p.waitForSelector(sel); await p.waitForTimeout(250); };
 const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
