@@ -27,8 +27,8 @@ export function rowHTML(e, now = Date.now()) {
     <span class="tr-ico" aria-hidden="true">${icon(e.kind === 'deck' ? 'layers' : 'trash')}</span>
     <div class="tr-main"><b class="tr-title">${esc(e.title || 'Deleted cards')}</b>
       <span class="tr-meta">${esc(counts)}</span><span class="tr-meta">${esc(when)}</span></div>
-    <div class="tr-acts"><button class="btn primary small" type="button" data-act="restore">Restore</button>
-      <button class="btn ghost small" type="button" data-act="drop">Delete now</button></div>
+    <div class="tr-acts"><button class="btn primary small" type="button" data-act="restore" aria-label="Restore ${esc(e.title || 'deleted cards')}">Restore</button>
+      <button class="btn ghost small" type="button" data-act="drop" aria-label="Delete ${esc(e.title || 'deleted cards')} now">Delete now</button></div>
     <div class="tr-box"></div></li>`;
 }
 

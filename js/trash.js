@@ -12,7 +12,7 @@ import { account } from './sync-state.js';
 import { plainText } from './format.js';
 import { isPair, unpaired } from './reverse.js';
 import { ownSynced } from './own-gate.js';
-import { buildEntry, cardsTitle, deckPath, deckFate, fixParent, KEEP_DAYS, DAY } from './trash-logic.js';
+import { buildEntry, cardsTitle, deckPath, deckFate, fixParent, roomWorthMaking, KEEP_DAYS } from './trash-logic.js';
 
 // Saves what a delete removed. `snap` is the same snapshot the Undo uses (it may also hold rows that were only changed: pass those
 // in `before` as { cards, decks } and they are kept apart). meta: { kind: 'cards' | 'deck', title, deckId }.
@@ -39,8 +39,10 @@ export async function keepDeleted(snap, { kind = 'cards', title = '', deckId = '
     const { entry, parts } = buildEntry(gone, meta);
     try { await store.addEntry(entry, parts); } catch (err) {
       if (err.code !== 'quota') throw err;
-      // The device is nearly full: make room by dropping the oldest half of the list, then try once more.
+      // The device is nearly full: make room by dropping the oldest half of the list, then try once more. Not worth it with fewer
+      // than 2 entries, or when what would be freed is smaller than this entry (then nothing is dropped for nothing).
       const all = await store.listEntries();
+      if (!roomWorthMaking(all, entry.rows)) throw err;
       await store.removeEntries(all.slice(Math.floor(all.length / 2)));
       await store.addEntry(entry, parts);
     }
@@ -58,9 +60,11 @@ export async function forgetDeleted(handle) {
 }
 
 // ---------- the list ----------
-// Entries made while signed out belong to this device and show whoever is signed in; entries made in an account show only in that account
-// (so one account's cards are never pushed into another).
-const visible = (entries, acct) => entries.filter(e => !e.userId || (acct && e.userId === acct.id));
+// An entry shows only in the account it was made in; one made while signed out shows only while signed out. So one account's cards
+// are never pushed into another. Signed-out entries join an account only when the person taps "Add these cards to your account"
+// when signing in (claim, below).
+const visible = (entries, acct) => entries.filter(e => (acct ? e.userId === acct.id : !e.userId));
+export const claim = userId => store.claimEntries(userId);
 export async function list({ now = Date.now() } = {}) {
   try { await store.purgeExpired(now); } catch (err) { console.error('Recently deleted:', err); }
   return visible(await store.listEntries(), await account());
@@ -71,20 +75,7 @@ export async function emptyList() { await store.removeEntries(await list()); }
 // This device was wiped (Reset, sign-out with Remove, Delete everywhere, Restore backup): the whole list goes, whoever's it was.
 export async function emptyAll() { try { await store.clearTrash(); } catch (err) { console.error('Recently deleted:', err); } }
 
-// Removes what is over 30 days old, at most once a day (the app calls this when the browser is idle after start).
-const PURGED_KEY = 'study-sprint-trash-purged';
-export async function purgeDaily({ now = Date.now(), force = false } = {}) {
-  try {
-    let last = 0;
-    try { last = Number(localStorage.getItem(PURGED_KEY)) || 0; } catch { /* no storage: purge every start */ }
-    if (!force && last && now >= last && now - last < DAY) return 0;
-    const n = await store.purgeExpired(now);
-    try { localStorage.setItem(PURGED_KEY, String(now)); } catch { /* fine */ }
-    return n;
-  } catch (err) { console.error('Recently deleted:', err); return 0; }
-}
-
-export { protectedMedia } from './trash-db.js';          // (kept in trash-db.js so sync.js can use it without loading all of this)
+export { purgeDaily, protectedMedia } from './trash-db.js';          // (kept in trash-db.js so the start-up code can use them without loading all of this)
 
 // ---------- restoring ----------
 // Puts an entry back, piece by piece. Options:
@@ -138,7 +129,11 @@ export async function restoreEntry(id, { onProgress = () => {}, pickDeck = null,
     for (const c of await db.getAll('cards')) if (isPair(c)) (partners.get(c.noteId) || partners.set(c.noteId, new Set()).get(c.noteId)).add(c.id);
   }
 
+  // Marked before the first piece: rows put back by this restore carry a time from now on, so an interrupted restore that is run
+  // again does not mistake them for "changed on another device" (rule 4).
+  if (!entry.restoringAt) { entry.restoringAt = Date.now(); await store.updateEntries([entry]); }
   const total = { cards: 0, reviews: 0, decks: 0, states: 0, newer: 0, noDeck: 0 };
+  const stateOf = new Map();
   for (let n = 0; n < entry.parts; n++) {
     const part = await store.getPart(id, n);
     if (!part) continue;
@@ -147,14 +142,15 @@ export async function restoreEntry(id, { onProgress = () => {}, pickDeck = null,
       gone: { ...part.gone, decks: part.gone.decks.map(d => fixParent(d, fix)), cards: part.gone.cards.map(c => (deckMap.has(c.deckId) ? { ...c, deckId: deckMap.get(c.deckId) } : c)) },
       before: part.before
     };
-    const got = await db.restoreDeleted(ready, entry, { partners, isPair, unpaired });
+    const got = await db.restoreDeleted(ready, entry, { partners, isPair, unpaired, stateOf });
     for (const k of Object.keys(total)) total[k] += got[k] || 0;
     onProgress({ done: n + 1, total: entry.parts });
     await new Promise(r => setTimeout(r));          // let the screen draw between pieces
   }
   if (total.reviews) await ownSynced();            // Own's memory no longer matches the log: it is rebuilt now, not at the next session
-  await store.removeEntry(entry);
-  return { ok: true, title: entry.title, deckId: [...deckMap.values()][0] || entry.deckId, ...total };
+  // Cards that could not be restored stay in the list, so a second Restore asks for a deck again.
+  if (!total.noDeck) await store.removeEntry(entry);
+  return { ok: true, kept: total.noDeck > 0, title: entry.title, deckId: [...deckMap.values()][0] || entry.deckId, ...total };
 }
 
 export { KEEP_DAYS };

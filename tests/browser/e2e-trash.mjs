@@ -1,8 +1,9 @@
 // Recently deleted (Settings → Your data → More settings): every delete is kept on this device for 30 days and can be restored
 // exactly (ids, schedules, review rows), by hand and through sync; Undo removes the entry; purge, wipes, accounts and big decks.
-import { chromium } from './pw.mjs';
+import { chromium, realChromium } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
 const browser = await chromium.launch();
+const realBrowser = await realChromium.launch();      // taps nothing by itself: the sign-in question is answered by the test
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const errors = [];
 const APP = 'http://localhost:8123/';
@@ -389,8 +390,6 @@ const review = (page, id, n = 2) => page.evaluate(async ([cid, k]) => {
   ok((await allEntries(page)).length === 2, 'the other account\'s entry is still stored (hidden, not deleted)');
   const res = await page.evaluate(async () => (await import('./js/trash.js')).restoreEntry('other'));
   ok(res.missing === true && await page.evaluate(async () => !(await (await import('./js/db.js')).get('cards', 'zzz'))), 'an entry from another account can not be restored: nothing is pushed into this account');
-  // signing out with "Remove" empties the list
-  await page.evaluate(async () => { await (await import('./js/trash-db.js')).clearTrash(); });
   await page.context().close();
 }
 {
@@ -406,14 +405,195 @@ const review = (page, id, n = 2) => page.evaluate(async ([cid, k]) => {
   await page.click('#resetBtn'); await page.click('#rsYes');
   await page.waitForFunction(() => /All data reset/.test(document.getElementById('toast')?.textContent || ''));
   ok((await allEntries(page)).length === 0, 'Reset all data empties the whole list, hidden entries too');
-  // Restore backup also empties it
-  await page.evaluate(async () => {
-    const db = await import('./js/db.js'); const t = await import('./js/trash-lazy.js');
-    await t.keepDeleted(await db.deleteCards([(await db.getAll('cards'))[0].id]));
+  await page.context().close();
+}
+
+// ---------- real sign-out with Remove, Delete everywhere and Restore backup empty the list (through the real screens) ----------
+{
+  const fake = fakeSupabase();
+  const page = await open(fake);
+  await page.goto(APP + '#/settings'); await page.waitForSelector('#syncEmail');
+  await page.fill('#syncEmail', 'wipe@example.com'); await page.fill('#syncPw', 'secret123'); await page.click('#syncCreate');
+  await page.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 15000 });
+  const keepOne = () => page.evaluate(async () => { const db = await import('./js/db.js'); const t = await import('./js/trash-lazy.js'); const id = 'w' + Math.random().toString(36).slice(2, 7); await db.addDeckWithCards({ id: 'wd' + id, name: 'W', color: '#46A758', created: Date.now() }, [{ id, deckId: 'wd' + id, front: 'W', back: 'b', tags: [], created: 1 }]); await t.keepDeleted(await db.deleteCards([id])); });
+  await keepOne();
+  ok((await allEntries(page)).length === 1, 'signed in: an entry is stored');
+  await page.click('#dangerZone > summary'); await page.click('#resetBtn'); await page.waitForSelector('#rsAll'); await page.click('#rsAll');
+  await page.waitForFunction(() => /Everything deleted/.test(document.getElementById('toast')?.textContent || ''), null, { timeout: 20000 });
+  ok((await allEntries(page)).length === 0, 'Delete everywhere (the real button) empties Recently deleted on this device');
+  await keepOne();
+  await page.goto(APP + '#/settings'); await page.waitForSelector('#signOutBtn');
+  await page.click('#signOutBtn'); await page.waitForSelector('#soRemove'); await page.click('#soRemove');
+  await page.waitForFunction(() => !document.querySelector('#signOutBtn'), null, { timeout: 20000 });
+  ok((await allEntries(page)).length === 0, 'sign out with "Sign out and remove it from this device" (the real button) empties the list');
+  await page.context().close();
+}
+{
+  const page = await open(null);
+  await page.evaluate(async () => { const db = await import('./js/db.js'); const t = await import('./js/trash-lazy.js'); await t.keepDeleted(await db.deleteCards([(await db.getAll('cards'))[0].id])); });
+  const data = await page.evaluate(async () => JSON.stringify(await (await import('./js/db.js')).exportAll()));
+  const file = (process.argv[2] || '.') + '/trash-backup.json';
+  (await import('node:fs')).writeFileSync(file, data);
+  ok((await allEntries(page)).length === 1, 'set up: one entry before Restore backup');
+  await page.goto(APP + '#/settings'); await page.waitForSelector('#importIn', { state: 'attached' });
+  await page.setInputFiles('#importIn', file); await page.waitForSelector('#rbYes'); await page.click('#rbYes');
+  await page.waitForFunction(() => !document.querySelector('#sheet[open]'), null, { timeout: 20000 });
+  ok((await allEntries(page)).length === 0, 'Restore backup (the real file picker and button) empties the list');
+  await page.context().close();
+}
+
+// ---------- signing in with cards from before: only "Add these cards" claims the signed-out entries ----------
+{
+  const fake = fakeSupabase();
+  const mkDevice = async () => {
+    const ctx = await realBrowser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
+    await ctx.addInitScript(() => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); } catch { /* fine */ } });
+    await ctx.route('https://lakxeftzlpvydzulxrbi.supabase.co/**', fake.handle);
+    const p = await ctx.newPage();
+    p.on('pageerror', e => errors.push('pageerror ' + e.message));
+    await p.goto(APP + '#/decks'); await p.waitForSelector('.deck');
+    return p;
+  };
+  const signIn = async (p, email, create) => {
+    await p.goto(APP + '#/decks'); await p.waitForSelector('.deck, .empty'); await p.goto(APP + '#/settings'); await p.waitForSelector('#syncEmail');
+    await p.fill('#syncEmail', email); await p.fill('#syncPw', 'secret123');
+    await p.click(create ? '#syncCreate' : '#syncForm button[type=submit]');
+  };
+  const seed = p => p.evaluate(async () => {
+    const db = await import('./js/db.js'); const t = await import('./js/trash-lazy.js'); const now = Date.now();
+    await db.addDeckWithCards({ id: 'mine', name: 'Mine', color: '#46A758', created: now }, Array.from({ length: 4 }, (_, i) => ({ id: 'm' + i, deckId: 'mine', front: 'M' + i, back: 'b', tags: [], created: now + i })));
+    await t.keepDeleted(await db.deleteCards(['m0']));
   });
-  ok((await allEntries(page)).length === 1, 'set up: one entry again');
-  await page.evaluate(async () => { const db = await import('./js/db.js'); const data = await db.exportAll(); await db.importAll(data); await (await import('./js/trash.js')).emptyAll(); });
-  ok((await allEntries(page)).length === 0, 'emptyAll (used by Restore backup and Delete everywhere) empties it');
+  const L = await mkDevice();
+  await seed(L);
+  ok((await entries(L)).length === 1, 'signed out: the entry shows');
+  await signIn(L, 'cat@example.com', true);
+  await L.waitForSelector('#sheet[open] #devCancel');
+  await L.click('#devCancel'); await L.waitForSelector('#sheet:not([open])', { state: 'attached' });
+  ok((await entries(L)).length === 1 && (await allEntries(L))[0].userId === null, 'Cancel: still signed out, the entry is unclaimed and still shows');
+  await L.click('#syncForm button[type=submit]');
+  await L.waitForSelector('#sheet[open] #devAdd');
+  await L.click('#devAdd');
+  await L.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 20000 });
+  const uid = await L.evaluate(async () => (await (await import('./js/sync-state.js')).account()).id);
+  const stored = await allEntries(L);
+  ok(stored.length === 1 && stored[0].userId === uid && (await entries(L)).length === 1, '"Add these cards": the entry now belongs to that account and shows there');
+  // a second device with a signed-out entry but nothing to ask about: signing in does NOT claim it (the list stays hidden while signed in)
+  const M = await mkDevice();
+  await M.evaluate(async () => { const db = await import('./js/db.js'); const t = await import('./js/trash-lazy.js'); await t.keepDeleted(await db.deleteCards(['sample-0'])); });
+  ok((await entries(M)).length === 1, 'second device, signed out: its entry shows');
+  await signIn(M, 'cat@example.com');
+  await M.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 20000 });
+  ok((await entries(M)).length === 0 && (await allEntries(M)).length === 1 && (await allEntries(M))[0].userId === null, 'signing in without the question: a signed-out entry is hidden, not claimed, so its cards can not be pushed into the account');
+  ok(await M.evaluate(async () => { const tr = await import('./js/trash.js'); return (await tr.restoreEntry((await (await import('./js/trash-db.js')).listEntries())[0].id)).missing === true; }), 'and it can not be restored while signed in');
+  // Start fresh wipes the list with the cards
+  const F = await mkDevice();
+  await seed(F);
+  await signIn(F, 'dog@example.com', true);
+  await F.waitForSelector('#sheet[open] #devFresh'); await F.click('#devFresh');
+  await F.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 20000 });
+  ok((await allEntries(F)).length === 0, 'Start fresh: the list is wiped with the cards');
+  for (const p of [L, M, F]) await p.context().close();
+}
+
+// ---------- a card that could not be restored stays in the list ----------
+{
+  const page = await open(null);
+  const r = await page.evaluate(async () => {
+    const db = await import('./js/db.js'); const t = await import('./js/trash-lazy.js'); const tr = await import('./js/trash.js');
+    await db.addDeckWithCards({ id: 'nd', name: 'NoDeck', color: '#46A758', created: Date.now() }, [{ id: 'nd1', deckId: 'nd', front: 'ND', back: 'b', tags: [], created: 1 }]);
+    await t.keepDeleted(await db.deleteCards(['nd1']));
+    await db.deleteDeck('nd');
+    const e = (await tr.list())[0];
+    // the person picks a deck that does not exist (it vanished meanwhile): the card can not be restored
+    const first = await tr.restoreEntry(e.id, { pickDeck: async () => ({ deckId: 'vanished' }) });
+    const stillListed = (await tr.list()).length;
+    const second = await tr.restoreEntry(e.id, { pickDeck: async () => ({ deckId: 'sample' }) });
+    return { first, stillListed, second, card: (await db.get('cards', 'nd1'))?.deckId, left: (await tr.list()).length };
+  });
+  ok(r.first.ok && r.first.noDeck === 1 && r.first.kept === true && r.stillListed === 1, 'a card that could not be restored keeps its entry in the list');
+  ok(r.second.ok && r.second.cards === 1 && r.card === 'sample' && r.left === 0 && !r.second.kept, 'a second Restore asks for a deck again and finishes the job');
+  await page.context().close();
+}
+
+// ---------- rule 3 for a card that is here: history comes back only onto the schedule it belongs to ----------
+{
+  const page = await open(null);
+  const r = await page.evaluate(async () => {
+    const db = await import('./js/db.js'); const t = await import('./js/trash-lazy.js'); const tr = await import('./js/trash.js');
+    const sched = (k, last) => ({ due: Date.now() + 86400000 * k, stability: 3 + k, difficulty: 5, reps: k, lapses: 0, state: 2, lastReview: last });
+    await db.addDeckWithCards({ id: 'r3', name: 'R3', color: '#46A758', created: Date.now() }, [{ id: 'r3a', deckId: 'r3', front: 'A', back: 'b', tags: [], created: 1 }, { id: 'r3b', deckId: 'r3', front: 'B', back: 'b', tags: [], created: 2 }]);
+    for (const id of ['r3a', 'r3b']) await db.saveReview({ cardId: id, ...sched(2, 1000) }, { cardId: id, timestamp: 1000, source: 'review', rating: 3, correct: true, state: 2 });
+    await t.keepDeleted(await db.deleteCards(['r3a', 'r3b']));
+    // both cards "came back another way"; r3a was studied again since (a different schedule), r3b has no schedule
+    await db.saveCards([{ id: 'r3a', deckId: 'r3', front: 'A', back: 'b', tags: [], created: 1 }, { id: 'r3b', deckId: 'r3', front: 'B', back: 'b', tags: [], created: 2 }]);
+    await db.saveReview({ cardId: 'r3a', ...sched(9, 5000) }, { cardId: 'r3a', timestamp: 5000, source: 'review', rating: 4, correct: true, state: 2 });
+    await db.deleteStateIfAny?.('r3b');
+    const e = (await tr.list())[0];
+    await tr.restoreEntry(e.id);
+    return { a: (await db.getCardLogs('r3a')).length, aState: (await db.get('cardStates', 'r3a')).reps, b: (await db.getCardLogs('r3b')).length, bState: !!(await db.get('cardStates', 'r3b')) };
+  });
+  ok(r.a === 1 && r.aState === 9, 'a live card studied since keeps its newer schedule and gets no old reviews added');
+  ok(r.b === 1 && r.bState, 'a live card with no schedule gets its schedule and history back');
+  await page.context().close();
+}
+
+// ---------- Undo does not wait for the trash write, and works when it fails or hangs ----------
+for (const mode of ['fails', 'hangs']) {
+  const page = await open(null);
+  await page.route('**/js/trash.js', route => (mode === 'fails' ? route.abort() : new Promise(() => {})));
+  const id = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards'))[0].id);
+  await page.goto(APP + '#/deck/sample'); await page.waitForSelector('.crow');
+  await page.locator(`.crow[data-id="${id}"] .crow-btn`).click(); await page.waitForSelector('#sheet [data-act="delete"]');
+  await page.click('#sheet [data-act="delete"]'); await page.click('#cfYes');
+  await page.waitForSelector('#toast:not([hidden]) .toast-link', { timeout: 3000 });
+  ok(/Card deleted/.test(await page.textContent('#toast')), `the Undo toast comes at once even when the trash code ${mode}`);
+  await page.click('#toast .toast-link');
+  await page.waitForFunction(() => document.querySelectorAll('.crow').length === 12, null, { timeout: 5000 });
+  ok(await page.evaluate(async id => !!(await (await import('./js/db.js')).get('cards', id)), id), `and Undo still brings the card back when the trash code ${mode}`);
+  await page.context().close();
+}
+
+// ---------- no room: the oldest half is dropped and the save is tried once more, but not for nothing ----------
+{
+  const page = await open(null);
+  const r = await page.evaluate(async () => {
+    const db = await import('./js/db.js'); const t = await import('./js/trash-lazy.js'); const tdb = await import('./js/trash-db.js');
+    const full = () => { const real = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (...a) { if (this.name === 'parts') { IDBObjectStore.prototype.put = real; throw new DOMException('full', 'QuotaExceededError'); } return real.apply(this, a); }; };
+    const one = async (id, k) => { await db.addDeckWithCards({ id: 'q' + id, name: 'Q' + id, color: '#46A758', created: Date.now() }, [{ id: 'qc' + id, deckId: 'q' + id, front: 'F' + id, back: 'b', tags: [], created: k }]);
+      await db.saveReview({ cardId: 'qc' + id, due: Date.now() + 1e8, stability: 3, difficulty: 5, reps: 1, lapses: 0, state: 2, lastReview: Date.now() }, { cardId: 'qc' + id, timestamp: Date.now(), source: 'review', rating: 3, correct: true, state: 2 });
+      return t.keepDeleted(await db.deleteCards(['qc' + id])); };
+    // one entry only: a failed save drops nothing and gives up
+    await one('a', 1);
+    full(); const lone = await one('b', 2);
+    const afterLone = (await tdb.listEntries()).map(e => e.title);
+    // three entries: the oldest half is dropped, the new one is saved
+    await new Promise(r => setTimeout(r, 5)); await one('c', 3); await new Promise(r => setTimeout(r, 5)); await one('d', 4);
+    const before = (await tdb.listEntries()).length;
+    full(); const kept = await one('e', 5);
+    return { lone, afterLone, before, kept: !!kept, after: (await tdb.listEntries()).map(e => e.title) };
+  });
+  ok(r.lone === null && r.afterLone.length === 1 && r.afterLone[0] === 'F' + 'a', 'no room and a single entry: nothing is dropped, the new one is not kept, the old one stays');
+  ok(r.before === 3 && r.kept && r.after.length === 2 && r.after.includes('Fe') && !r.after.includes('Fa'), `no room with 3 entries: the oldest are dropped and the new one is saved (${r.after.join(', ')})`);
+  await page.context().close();
+}
+
+// ---------- Undo after the clock went back: the restored rows are later than the delete marker ----------
+{
+  const page = await open(null);
+  const r = await page.evaluate(async () => {
+    const db = await import('./js/db.js');
+    const id = (await db.getAll('cards'))[0].id;
+    const real = Date.now;
+    Date.now = () => real() + 3600000;                   // the delete happened while the clock was an hour fast
+    const snap = await db.deleteCards([id]);
+    Date.now = real;                                      // then the clock went back
+    const tomb = await db.get('deleted', 'cards:' + id);
+    await db.restoreSnapshot(snap);
+    const card = await db.get('cards', id), st = await db.get('cardStates', id);
+    return { tomb: tomb.deletedAt, card: card.updatedAt, now: real() };
+  });
+  ok(r.tomb > r.now && r.card > r.tomb, 'Undo after the clock went back: the restored card is stamped later than its delete marker (so sync does not undo the Undo)');
   await page.context().close();
 }
 
@@ -484,3 +664,4 @@ for (const [w, h, ui] of [[390, 844, 'original'], [1440, 900, 'clinical']]) {
 
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
 await browser.close();
+await realBrowser.close();

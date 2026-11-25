@@ -30,7 +30,7 @@ import { dayStart, dayEnd } from './days.js';
 import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 import { validOcclusion, cleanAccept, cleanTypeIn } from './card-checks.js';
 import { validFields, cleanFields } from './note-fields.js';
-import { restoreRow, restoreStamp, hasPartner } from './trash-logic.js';
+import { restoreRow, restoreStamp, hasPartner, sameSchedule } from './trash-logic.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { ui: 'original', skin: 'violet', mode: 'auto', oled: false }, // (a new install follows the device's light or dark setting; a saved choice is kept) ui: 'original' or 'clinical' (css/clinical.css); mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
@@ -459,7 +459,7 @@ export async function restoreSnapshot(snap) {
 // changed (a partner card, a moved subdeck) goes back only if nobody changed it since. Safe to run twice.
 //   part  { gone: {decks, cards, cardStates, reviewLog}, before: {decks, cards} }
 //   entry the entry (settledAt)
-//   ctx   { partners: Map noteId -> Set of card ids that will exist, isPair(card), unpaired(card) (from reverse.js): a paired card with
+//   ctx   { stateOf: Map cardId -> the schedule in the entry (kept across pieces), partners: Map noteId -> Set of card ids that will exist, isPair(card), unpaired(card) (from reverse.js): a paired card with
 //         no other card on its note comes back as an ordinary card }
 // Returns counts: { decks, cards, states, reviews, newer (rows left because another device changed them), noDeck }.
 export async function restoreDeleted(part, entry, ctx = {}) {
@@ -489,7 +489,8 @@ export async function restoreDeleted(part, entry, ctx = {}) {
     // 4: rows the delete only changed (a partner card, a moved subdeck) go back if nobody changed them since.
     for (const name of ['decks', 'cards']) {
       for (const { row, live } of await find(name, part.before?.[name] || [])) {
-        if (restoreRow({ kind: 'before', live, entry }) !== 'put') { if (live) out.newer++; continue; }
+        const r = restoreRow({ kind: 'before', live, entry });
+        if (r !== 'put') { if (r === 'newer') out.newer++; continue; }
         back(name, row, null, (live.updatedAt || 0) + 1);
         if (name === 'cards' && isPair(row)) (partners.get(row.noteId) || partners.set(row.noteId, new Set()).get(row.noteId)).add(row.id);
       }
@@ -502,7 +503,7 @@ export async function restoreDeleted(part, entry, ctx = {}) {
     }
     const deckKnown = new Map();
     const hasDeck = async id => decksHere.has(id) || (deckKnown.has(id) ? deckKnown.get(id) : deckKnown.set(id, (await done(tx.objectStore('decks').getKey(id))) !== undefined).get(id));
-    const cardsHere = new Set();
+    const cardsHere = new Set(), restoredNow = new Set();
     for (const { row, live, tomb } of await find('cards', part.gone.cards)) {
       const r = restoreRow({ live, tomb, entry, needsDeck: !row.deckId || await hasDeck(row.deckId) });
       if (r === 'live') { cardsHere.add(row.id); continue; }                      // it is here already: its schedule and history can still come back
@@ -510,17 +511,30 @@ export async function restoreDeleted(part, entry, ctx = {}) {
       if (r === 'no-deck') { out.noDeck++; continue; }
       // A card whose partner is not coming back too is an ordinary card again (rule 4).
       back('cards', isPair(row) && !hasPartner(row, partners) ? unpaired(row) : row, tomb);
-      cardsHere.add(row.id); out.cards++;
+      cardsHere.add(row.id); restoredNow.add(row.id); out.cards++;
     }
     // Schedules and reviews: only when their card is here (rule 3), so a card that came back by sync without its history gets it back.
     const cardKnown = new Map();
     const hasCard = async id => cardsHere.has(id) || (cardKnown.has(id) ? cardKnown.get(id) : cardKnown.set(id, (await done(tx.objectStore('cards').getKey(id))) !== undefined).get(id));
+    const stateOf = ctx.stateOf || new Map();          // each card's schedule as it is in the entry (shared by all pieces)
     for (const { row, live, tomb } of await find('cardStates', part.gone.cardStates)) {
+      stateOf.set(row.cardId, row);
       const r = restoreRow({ live, tomb, entry, needsCard: await hasCard(row.cardId) });
       if (r === 'put') { back('cardStates', row, tomb); out.states++; } else if (r === 'newer') out.newer++;
     }
+    // Reviews of a card that was here before this restore only come back if that card has no schedule, or the one in the entry (rule 3).
+    const scheduleOk = new Map();
+    const fits = async id => {
+      if (!scheduleOk.has(id)) {
+        const here = await done(tx.objectStore('cardStates').get(id));
+        scheduleOk.set(id, !here || sameSchedule(here, stateOf.get(id)));
+      }
+      return scheduleOk.get(id);
+    };
     for (const { row, live, tomb } of await find('reviewLog', part.gone.reviewLog)) {
-      const r = restoreRow({ live, tomb, entry, needsCard: await hasCard(row.cardId) });
+      let ok = await hasCard(row.cardId);
+      if (ok && !restoredNow.has(row.cardId) && !(await fits(row.cardId))) { out.newer++; continue; }
+      const r = restoreRow({ live, tomb, entry, needsCard: ok });
       if (r === 'put') { back('reviewLog', row, tomb); out.reviews++; } else if (r === 'newer') out.newer++;
     }
   });
@@ -1128,7 +1142,7 @@ export async function deleteEverything() {
 //   whatsNewSeen  the newest version whose "What's new" card was seen on this device (whats-new.js): each device tells its own story
 //   pendingSignup  { email, at }: an account was made and its confirmation email has not been followed yet (Settings → Sync shows it for 7 days)
 //   mediaTotals, mediaIndexed, mp:<id>   book-keeping for pictures and sounds (see "pictures" below): sizes, and which files are not uploaded yet
-export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'syncDamaged', 'pushBackoff', 'mediaBackoff', 'lastBackup', 'mediaCleanedAt', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid', 'whatsNewSeen', 'pendingSignup'];
+export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'syncDamaged', 'pushBackoff', 'mediaBackoff', 'lastBackup', 'mediaCleanedAt', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid', 'whatsNewSeen', 'pendingSignup', 'trashReadFailedAt'];
 // (Media deletion marks, "mdel:<id>", do sync but are left out of backups; "mseen:<id>" never leaves the device: see media-sweep.js.)
 export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING) || isMarkKey(k) || isSeenKey(k);
 

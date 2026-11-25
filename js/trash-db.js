@@ -122,7 +122,65 @@ export async function mediaIds(opts = {}) {
   return used;
 }
 
-// For the clean-up and the account sweep: the ids to leave alone, or null when the list can't be read (then they must not clean).
-export async function protectedMedia(opts = {}) {
-  try { return await mediaIds(opts); } catch (err) { console.error('Recently deleted:', err); return null; }
+// Saves changed entry rows only (their pieces stay as they are): the account claim and the "restoring" mark.
+export const updateEntries = (entries, opts = {}) => withDb(opts, false, db => run(db, ['entries'], 'readwrite', s => { for (const e of entries) s.entries.put(e); }), undefined);
+
+// A signed-out entry has no account (userId null). The person chose "Add these cards to your account" when signing in: those entries now
+// belong to that account, so they show there (and only there). Returns how many were claimed.
+export async function claimEntries(userId, opts = {}) {
+  const mine = (await listEntries(opts)).filter(e => !e.userId);
+  if (mine.length) await updateEntries(mine.map(e => ({ ...e, userId })), opts);
+  return mine.length;
+}
+
+// Deletes the whole database (a last resort when it can't be read for days).
+export function deleteTrashDb({ idb } = {}) {
+  const f = factory(idb);
+  if (!f) return Promise.resolve(true);
+  return new Promise((resolve, reject) => {
+    let req;
+    try { req = f.deleteDatabase(TRASH_DB_NAME); } catch { reject(new TrashDbError('The Recently deleted database could not be removed.')); return; }
+    req.onsuccess = () => resolve(true);
+    req.onblocked = () => reject(new TrashDbError('Close other Study Sprint tabs, then try again.', 'blocked'));
+    req.onerror = () => reject(new TrashDbError('The Recently deleted database could not be removed.'));
+  });
+}
+
+// Removes what is over 30 days old, at most once a day (the app calls this when the browser is idle after start). `force` skips the once-a-day check.
+const PURGED_KEY = 'study-sprint-trash-purged';
+export async function purgeDaily({ now = Date.now(), force = false, idb } = {}) {
+  try {
+    let last = 0;
+    try { last = Number(localStorage.getItem(PURGED_KEY)) || 0; } catch { /* no storage: purge every start */ }
+    if (!force && last && now >= last && now - last < 86400000) return 0;
+    const n = await purgeExpired(now, { idb });
+    try { localStorage.setItem(PURGED_KEY, String(now)); } catch { /* fine */ }
+    return n;
+  } catch (err) { console.error('Recently deleted:', err); return 0; }
+}
+
+// For the clean-up and the account sweep: the ids to leave alone, or null when the list can't be read (the callers then skip the
+// steps that could lose a file). If it can't be read for 3 days in a row, the database is deleted (it is only a 30-day safety net)
+// and this carries on as if the list were empty. The day the reads started failing is kept on this device only ('trashReadFailedAt').
+const SELF_HEAL_MS = 3 * 86400000;
+async function readFailedAt() {
+  const db = await import('./db.js');
+  return { get: async () => Number((await db.getSettings()).trashReadFailedAt) || 0, set: v => db.setSetting('trashReadFailedAt', v) };
+}
+export async function protectedMedia({ idb, now = Date.now(), failedAt } = {}) {
+  const mark = failedAt || await readFailedAt().catch(() => null);
+  try {
+    const ids = await mediaIds({ idb });
+    try { if (mark && await mark.get()) await mark.set(null); } catch { /* the note is only a note */ }
+    return ids;
+  } catch (err) {
+    console.error('Recently deleted:', err);
+    if (!mark) return null;
+    const since = await mark.get().catch(() => 0);
+    if (!since) { await mark.set(now).catch(() => {}); return null; }
+    if (now - since < SELF_HEAL_MS) return null;
+    try { await deleteTrashDb({ idb }); } catch { return null; }
+    await mark.set(null).catch(() => {});
+    return new Set();
+  }
 }

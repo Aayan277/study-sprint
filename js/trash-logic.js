@@ -62,6 +62,7 @@ export function buildEntry(snap, { id, kind, title, deckId = '', deckPath: path 
   const entry = {
     id, kind, title, deckId, deckPath: path, deletedAt: now, settledAt: now, userId,
     counts: { cards: gone.cards.length, reviews: gone.reviewLog.length },
+    rows: gone.decks.length + gone.cards.length + gone.cardStates.length + gone.reviewLog.length,      // a rough size, to judge whether making room is worth it
     deckIds: gone.decks.map(d => d.id),            // the decks this entry holds, so another entry can find "its deck was deleted too"
     deckNames,                                      // { deckId: name } for the decks the cards were in
     mediaIds: [...mediaOf(gone.cards)],
@@ -72,7 +73,7 @@ export function buildEntry(snap, { id, kind, title, deckId = '', deckPath: path 
 
 // Rules 1-4 for one row. Says what to do with it:
 //   'put'          put it back
-//   'live'         rule 1: it exists here now (came back another way): leave it
+//   'live'         rule 1: it exists here now (came back another way, or an interrupted restore did it): leave it
 //   'newer'        rule 2 / 4: changed or deleted again on another device since: leave it
 //   'no-card'      rule 3: a schedule or review whose card is not here: leave it
 //   'no-deck'      the card's deck is not here (and was not chosen)
@@ -87,6 +88,7 @@ export function restoreRow({ kind = 'gone', live, tomb, entry, needsCard, needsD
   if (kind === 'before') {
     // Rule 4: only if the row is exactly as the delete left it. Otherwise the newer row stays.
     if (!live) return 'no-card';
+    if (entry.restoringAt && (live.updatedAt || 0) >= entry.restoringAt) return 'live';      // an earlier, interrupted restore already put it back
     return (live.updatedAt || 0) <= entry.settledAt ? 'put' : 'newer';
   }
   if (live) return 'live';                                                  // rule 1
@@ -132,3 +134,14 @@ export const hasPartner = (card, partners) => {
   for (const id of ids) if (id !== card.id) return true;
   return false;
 };
+
+// Rule 3, for reviews of a card that is here already: they come back only when the card has no schedule here, or its schedule is
+// the one in the entry (so history is never added to a card that was studied on since).
+export const sameSchedule = (a, b) => !!a && !!b && a.lastReview === b.lastReview && a.reps === b.reps && a.stability === b.stability;
+
+// Is it worth dropping old entries to make room for a new one? Only with 2 or more entries, and when what they free is as big as the new entry.
+export function roomWorthMaking(entries, newRows) {
+  if (entries.length < 2) return false;
+  const drop = entries.slice(Math.floor(entries.length / 2));
+  return drop.reduce((n, e) => n + (e.rows || 0), 0) >= newRows;
+}

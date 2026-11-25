@@ -23,7 +23,7 @@ import { ancestors, subtreeIds, deckPath, deckChoices, effectiveDeck } from './d
 import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher, undoOpts } from './ui.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { go as navGo } from './nav.js';
-import { keepDeleted, forgetDeleted } from './trash-lazy.js';
+import { keepDeleted, forgetLater } from './trash-lazy.js';
 
 const factsMemo = new WeakMap();      // typeFacts per card object (a changed card is a new object)
 const factsOf = card => factsMemo.get(card) || (factsMemo.set(card, typeFacts(card)), factsMemo.get(card));
@@ -647,10 +647,10 @@ async function saveWithReverse(card, pair, both, sides, shared, ops, msg) {
 // After a delete: the toast offers Undo, which puts the cards back with their schedules and history (db.restoreSnapshot), then refreshes.
 // It is also kept in Recently deleted (js/trash.js) for 30 days; Undo takes that entry out again so it does not show twice.
 // `before`: cards the delete only changed (a partner that turned into an ordinary card), as they were.
-async function deleted(snap, msg, ctx, again, before) {
+function deleted(snap, msg, ctx, again, before) {
   db.holdMedia();
-  const kept = await keepDeleted(snap, { before });
-  return again(msg, 'delete', undoOpts(async () => { await db.restoreSnapshot(snap); await forgetDeleted(kept); toast(snap.cards.length === 1 ? 'Card restored' : 'Cards restored'); await (ctx.refresh || (async () => {}))(); }));
+  const kept = keepDeleted(snap, { before });          // (not waited for: the toast and its Undo come at once)
+  return again(msg, 'delete', undoOpts(async () => { await db.restoreSnapshot(snap); forgetLater(kept); toast(snap.cards.length === 1 ? 'Card restored' : 'Cards restored'); await (ctx.refresh || (async () => {}))(); }));
 }
 // Deleting one card of a pair: both, or just this one (the other turns into an ordinary card).
 function askDeletePair(card, partner, again, ctx) {
@@ -834,10 +834,10 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       const gone = new Set(selected.map(c => c.id)), notes = new Set(selected.filter(isPair).map(c => c.noteId));
       const left = notes.size ? (await db.getAll('cards')).filter(c => isPair(c) && notes.has(c.noteId) && !gone.has(c.id)) : [];
       if (left.length) { snap.cards.push(...left); await db.saveCards(left.map(unpaired)); }
-      const kept = await keepDeleted(snap, { before: { cards: left } });
+      const kept = keepDeleted(snap, { before: { cards: left } });
       clear();
       closeSheet();
-      toast(`Deleted ${plural(n, 'card')}`, undoOpts(async () => { await db.restoreSnapshot(snap); await forgetDeleted(kept); toast(`Restored ${plural(n, 'card')}`); await refresh(); }));
+      toast(`Deleted ${plural(n, 'card')}`, undoOpts(async () => { await db.restoreSnapshot(snap); forgetLater(kept); toast(`Restored ${plural(n, 'card')}`); await refresh(); }));
       return refresh();
     });
   }));

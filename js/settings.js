@@ -970,7 +970,7 @@ export async function drawDamaged() {
 
 // Asked by sync.signIn / createAccount before anything is merged, when this device holds cards that aren't this account's.
 // Answers 'go' or 'cancel'. "Remove them" wipes this device first (the account that owns them keeps its copy).
-function askAboutDevice(v) {
+function askAboutDevice(v, userId) {
   return new Promise(resolve => {
     let settled = false;
     const finish = answer => { if (!settled) { settled = true; resolve(answer); } };
@@ -1007,7 +1007,11 @@ function askAboutDevice(v) {
     $('devCancel').addEventListener('click', () => { finish('cancel'); closeSheet(); });
     $('devRemove')?.addEventListener('click', wipeThen);
     $('devFresh')?.addEventListener('click', wipeThen);
-    $('devAdd')?.addEventListener('click', () => { finish('go'); closeSheet(); });
+    $('devAdd')?.addEventListener('click', async () => {
+      // The cards are now this account's, so what was deleted from them while signed out (Recently deleted) is too. Only here: Cancel and Start fresh never claim it.
+      try { if (userId) await (await import('./trash.js')).claim(userId); } catch (err) { console.error(err); }
+      finish('go'); closeSheet();
+    });
   });
 }
 

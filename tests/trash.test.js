@@ -1,7 +1,7 @@
 // Recently deleted: the rules (js/trash-logic.js), checked one by one. The database side is tests/trash-db.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildEntry, restoreRow, restoreStamp, expired, daysLeft, deckFate, fixParent, hasPartner, cardsTitle, deckPath, mediaOf, PART_ROWS, KEEP_DAYS, DAY } from '../js/trash-logic.js';
+import { buildEntry, restoreRow, restoreStamp, expired, daysLeft, deckFate, fixParent, hasPartner, cardsTitle, deckPath, mediaOf, sameSchedule, roomWorthMaking, PART_ROWS, KEEP_DAYS, DAY } from '../js/trash-logic.js';
 
 const entry = { id: 'e1', settledAt: 1000, deletedAt: 1000 };
 
@@ -118,4 +118,30 @@ test('a pair partner that is not coming back leaves the card ordinary', () => {
   assert.equal(hasPartner({ id: 'a', noteId: 'n1' }, partners), false);       // only itself
   assert.equal(hasPartner({ id: 'b', noteId: 'n2' }, partners), true);
   assert.equal(hasPartner({ id: 'z', noteId: 'none' }, partners), false);
+});
+
+test('an interrupted restore run again does not call its own rows "changed on another device"', () => {
+  const e = { ...entry, restoringAt: 2000 };
+  assert.equal(restoreRow({ kind: 'before', live: { updatedAt: 2500 }, entry: e }), 'live');       // put back by the first run
+  assert.equal(restoreRow({ kind: 'before', live: { updatedAt: 1500 }, entry: e }), 'newer');      // really changed in between
+  assert.equal(restoreRow({ kind: 'before', live: { updatedAt: 2500 }, entry }), 'newer');         // no restore started: a real later change
+});
+test('rule 3 for reviews of a card that is here: only the schedule in the entry (or none) lets them back', () => {
+  const a = { lastReview: 5, reps: 2, stability: 3 };
+  assert.equal(sameSchedule(a, { ...a, due: 1 }), true);
+  assert.equal(sameSchedule(a, { ...a, reps: 3 }), false);
+  assert.equal(sameSchedule(a, undefined), false);
+});
+test('making room for a new entry: only with 2 or more entries and when the oldest half frees at least as much', () => {
+  const e = rows => ({ rows });
+  assert.equal(roomWorthMaking([], 5), false);
+  assert.equal(roomWorthMaking([e(100)], 5), false);                       // one entry: nothing is dropped
+  assert.equal(roomWorthMaking([e(100), e(10)], 50), false);               // the oldest frees 10, the new one needs 50
+  assert.equal(roomWorthMaking([e(100), e(60)], 50), true);
+  assert.equal(roomWorthMaking([e(1), e(1), e(1)], 3), false);             // drops 2 oldest = 2 rows < 3
+  assert.equal(roomWorthMaking([{}, {}], 1), false);                       // entries without a size count as nothing
+});
+test('an entry knows its size in rows', () => {
+  const { entry: e } = buildEntry({ decks: [{ id: 'd' }], cards: [{ id: 'c' }], cardStates: [{ cardId: 'c' }], reviewLog: [{ id: 1 }, { id: 2 }] }, { id: 'x', kind: 'deck', title: 't' });
+  assert.equal(e.rows, 5);
 });

@@ -1,7 +1,7 @@
 // Recently deleted: its separate database (js/trash-db.js), on the in-memory stand-in for IndexedDB (tests/own-idb-fake.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addEntry, listEntries, getPart, removeEntry, removeEntries, purgeExpired, clearTrash, mediaIds, protectedMedia, TRASH_DB_NAME, TRASH_DB_VERSION, TrashDbError } from '../js/trash-db.js';
+import { claimEntries, purgeDaily, addEntry, listEntries, getPart, removeEntry, removeEntries, purgeExpired, clearTrash, mediaIds, protectedMedia, TRASH_DB_NAME, TRASH_DB_VERSION, TrashDbError } from '../js/trash-db.js';
 import { makeFakeIdb } from './own-idb-fake.mjs';
 
 const DAY = 86400000;
@@ -99,4 +99,45 @@ test('protectedMedia gives null (not an empty list) when the database can not be
   const broken = { open() { throw new Error('nope'); } };
   const was = console.error; console.error = () => {};
   try { assert.equal(await protectedMedia({ idb: broken }), null); } finally { console.error = was; }
+});
+
+test('claiming: only signed-out entries get the account, and only theirs', async () => {
+  const idb = makeFakeIdb();
+  await add(idb, 'out', 1); await add(idb, 'mine', 2, { userId: 'u1' }); await add(idb, 'theirs', 3, { userId: 'u2' });
+  assert.equal(await claimEntries('u1', { idb }), 1);
+  const by = Object.fromEntries((await listEntries({ idb })).map(e => [e.id, e.userId]));
+  assert.deepEqual(by, { out: 'u1', mine: 'u1', theirs: 'u2' });
+  assert.deepEqual((await getPart('out', 1, { idb })).gone.cards, [{ id: 'out-b' }]);      // the pieces are untouched
+  assert.equal(await claimEntries('u1', { idb }), 0);
+});
+
+// A list that can't be read: protectedMedia says null, and after 3 days in a row it deletes the database and carries on.
+const broken = () => { let deleted = 0; return { idb: { open() { throw new Error('nope'); }, deleteDatabase() { deleted++; const r = {}; setTimeout(() => r.onsuccess && r.onsuccess({}), 0); return r; } }, deleted: () => deleted }; };
+const note = () => { let v = 0; return { get: async () => v, set: async x => { v = x || 0; } }; };
+test('an unreadable list: null at first, still null on day 2, then the database is deleted on day 3 and the clean-up carries on', async () => {
+  const was = console.error; console.error = () => {};
+  try {
+    const { idb, deleted } = broken(), failedAt = note(), t0 = 1000 * DAY;
+    assert.equal(await protectedMedia({ idb, now: t0, failedAt }), null);
+    assert.equal(await failedAt.get(), t0);                                              // the first failure is remembered
+    assert.equal(await protectedMedia({ idb, now: t0 + 2 * DAY, failedAt }), null);
+    assert.equal(deleted(), 0);
+    const healed = await protectedMedia({ idb, now: t0 + 3 * DAY, failedAt });
+    assert.ok(healed instanceof Set && healed.size === 0);
+    assert.equal(deleted(), 1);
+    assert.equal(await failedAt.get(), 0);                                               // and counting starts over
+  } finally { console.error = was; }
+});
+test('a good read clears the failure note', async () => {
+  const idb = makeFakeIdb(), failedAt = note();
+  await failedAt.set(5);
+  assert.ok((await protectedMedia({ idb, failedAt })) instanceof Set);
+  assert.equal(await failedAt.get(), 0);
+});
+test('purgeDaily: once a day, unless forced', async () => {
+  const idb = makeFakeIdb(), now = 100 * DAY;
+  await add(idb, 'old', now - 40 * DAY);
+  assert.equal(await purgeDaily({ now, force: true, idb }), 1);
+  await add(idb, 'old2', now - 40 * DAY);
+  assert.equal(await purgeDaily({ now, force: true, idb }), 1);
 });
