@@ -5,7 +5,7 @@
 // plain answer-type wording, Today without repeats, the What's new card, Study ahead and the small fixes.
 // Run with: node tests/browser/run.mjs uipolish
 import fs from 'node:fs';
-import { chromium, deckMenu } from './pw.mjs';
+import { chromium, deckMenu, sheetSettled } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const errors = [];
@@ -331,6 +331,7 @@ for (const [w, h] of [[390, 844], [320, 640]]) {
   ok(await p.evaluate(() => { const s = document.querySelector('#sheet'); return s.scrollWidth <= s.clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth; }), `M6 (${w}px): nothing overflows sideways with the editor open`);
   await p.screenshot({ path: SP + `/uipolish-editor-${w}.png` });
   await p.keyboard.press('Escape');
+  await sheetSettled(p);      // nav takes the closed editor's history entry off a moment later; a reload that starts before that lands is cancelled and never reaches "load"
   for (const hash of ['#/today', '#/decks', '#/deck/sample', '#/import', '#/stats', '#/settings']) {
     await go(p, hash, 'main h1, main .screen-head');
     ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `M6 (${w}px): no sideways scroll on ${hash}`);
