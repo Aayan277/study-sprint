@@ -306,6 +306,14 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .field select,.field textarea{width:100%;min-width:0;font-size:var(--fs-md);padding:11px 13px}
 .field textarea{line-height:1.45;resize:vertical}
 .select{width:100%;min-width:0;font-size:var(--fs-md);padding:11px 13px}
+/* Every drop-down: the app's own chevron and the same edge, height and corners as a text box (Safari/WebKit otherwise draws its own
+   double arrows and a thin edge). The chevron is a picture, so it has one grey for light and one for dark. */
+:root{--chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235b6170' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 6l4.5 4.5L12.5 6'/%3E%3C/svg%3E")}
+:root[data-theme="dark"]{--chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a7acb8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 6l4.5 4.5L12.5 6'/%3E%3C/svg%3E")}
+.select,.field select,.br-controls select,.easy-day select{-webkit-appearance:none;appearance:none;box-sizing:border-box;padding-right:38px;
+  background-image:var(--chev);background-repeat:no-repeat;background-position:right 12px center;background-size:16px;cursor:pointer;text-overflow:ellipsis}
+.select::-ms-expand,.field select::-ms-expand{display:none}
+@media (forced-colors:active){.select,.field select,.br-controls select,.easy-day select{background-image:none;-webkit-appearance:auto;appearance:auto}}
 
 .card{background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-4);min-width:0}
 .section{margin-bottom:var(--s-6)}
@@ -1236,7 +1244,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 
 /* ---------- 13. Stats ---------- */
 .filter-row{display:flex;gap:10px;margin-bottom:var(--s-3)}
-.filter-row .select{width:auto;max-width:100%;border-radius:var(--r-sm);padding:7px 12px;font-size:var(--fs-sm);background-color:var(--surface-1)}
+.filter-row .select{width:auto;max-width:100%;border-radius:var(--r-sm);padding:7px 34px 7px 12px;font-size:var(--fs-sm);background-color:var(--surface-1)}
 /* One course in Stats (Settings → Appearance → Exam readiness in Stats): a deck picker button, then a readiness header */
 .stats-scope{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:var(--s-3)}
 .pick-btn{display:inline-flex;align-items:center;gap:10px;min-height:44px;max-width:100%;padding:0 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);font:600 var(--fs-md) var(--f-ui);cursor:pointer;box-shadow:var(--e-1)}
