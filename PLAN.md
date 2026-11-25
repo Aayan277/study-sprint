@@ -11,24 +11,29 @@ The current state and what's next. Keep this file short: history goes in [CHANGE
 - Each release adds a line to the top of CHANGELOG.md (the same words as its `js/whats-new.js` entry).
 - Day-to-day rules are in `CLAUDE.md` and the `release` skill (`.claude/skills/release`).
 
-## Where things stand (v4.71)
+## Where things stand (v4.72)
 
 - Live at https://aayan277.github.io/study-sprint/ (GitHub Pages, `main` branch root). Code is all rights reserved (`LICENSE`).
 - Flashcards with FSRS scheduling (FSRS-6 is the default and the fallback), Anki/CSV/Excel/PDF import, Play games, Practice test, exam planning, stats, optional sync (Supabase).
+- Deck-based, not course-based: the first run has no "Name your course" step and new installs get a "Sample deck" (4.70). Exam dates and the course code are optional extras on any deck.
+- Recently deleted (4.72): deleted cards and decks wait 30 days in Settings → Your data → More settings (kept hidden on purpose; nothing else points to it). Per device, in its own IndexedDB database `study-sprint-trash`; only a restore syncs. Design: `docs/design/recently-deleted-plan.md`.
+- Headline "Study less. Remember more."; plain promo images made by `tests/browser/promo-images.mjs` and screenshots by `tests/browser/readme-shots.mjs`.
 - Two styles: Original (`css/styles.css`) and Clinical (`css/clinical.css`), each light and dark.
 - Own model: Settings → Study → Advanced scheduling → Own model → Load model file. It only takes over once it is better at the 99% level (`js/own-verdict.js`). Model files are never committed.
 
 ## Next
 
-1. Clinical on a computer: all pages on one left edge.
-2. A Practice button on each deck page (Test, Game or Exam prep).
-3. "Recently deleted" for 30 days (needs care with sync).
-4. Owner decisions waiting: Clinical deck page order (Review before Exam prep?), Welcome screen headline and taglines, the Play button on deck cards.
+1. A Practice button on each deck page (Test, Game or Exam prep).
+2. Clinical on a computer: all pages on one left edge (the owner said leave Clinical alone for now).
+3. Owner decisions waiting: Clinical deck page order (Review before Exam prep?), the Play button on deck cards.
+4. Ideas the owner raised: a flat app icon to match the new plain images (the icon still has a purple haze), and toning down "Add exam date" on Today.
 
-## Handoff (2026-11-17, after v4.68)
+## Handoff (2026-11-25, 4.72)
 
-**Unfinished, nothing half-built:** every branch with work on it is merged; the only open work is the Next list above.
-- Two browser tests fail now and then when several runs share a busy machine and pass when run alone: `e2e-anki-update` (the update toast) and `e2e-uipolish` (a navigation wait). `e2e-clinical` once logged "Cannot set properties of null (setting 'innerHTML')" in the wide 1920 light scene; it never reproduced and the 4.68 review found no new code that could cause it. If it comes back, log `e.stack` in that test's `watch()`.
+**Unfinished:** 4.72 (Recently deleted, the new headline and images, the e2e-uipolish fix) is a PR waiting for the owner's phone check; see that PR. After it merges nothing is half-built.
+- Another Claude chat works on the same repo at the same time (it released 4.69 and 4.71). Before each release, fetch main, merge it in and take the next free version number.
+- The owner must paste the GitHub About text by hand (Settings can't be changed from a session): description "Free flashcards that come back right before you forget. Spaced repetition (FSRS), timed games, import from Anki, Excel and PDF. Works offline, no account.", website https://aayan277.github.io/study-sprint/, topics flashcards, spaced-repetition, fsrs, anki, pwa, study, education, offline-first, javascript, vanilla-js; and upload `icons/og-1200x630.png` as the Social preview.
+- Two browser tests fail now and then when several runs share a busy machine and pass when run alone: `e2e-anki-update` (the update toast) and `e2e-uipolish` (a navigation wait; fixed in 4.72: it now waits for the closed editor's history step before reloading). `e2e-clinical` once logged "Cannot set properties of null (setting 'innerHTML')" in the wide 1920 light scene; it never reproduced and the 4.68 review found no new code that could cause it. If it comes back, log `e.stack` in that test's `watch()`.
 - Small review notes left for later: `shouldSaveAnkiLibraries` (js/anki-read.js) and the inline check in js/app.js must stay the same; in the exam sheet the date default comes from the first deck and doesn't follow the Deck dropdown.
 - About 140 old branches are on GitHub, most already merged. Delete them only after the owner says "yes, delete the merged branches".
 - `claude/own-model` holds the training scripts. It is never merged into main.
