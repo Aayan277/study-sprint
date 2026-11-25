@@ -160,8 +160,9 @@ export async function purgeDaily({ now = Date.now(), force = false, idb } = {}) 
 }
 
 // For the clean-up and the account sweep: the ids to leave alone, or null when the list can't be read (the callers then skip the
-// steps that could lose a file). If it can't be read for 3 days in a row, the database is deleted (it is only a 30-day safety net)
-// and this carries on as if the list were empty. The day the reads started failing is kept on this device only ('trashReadFailedAt').
+// steps that could lose a file). If the first failed read was at least 3 days ago and no read has succeeded since, the database is
+// deleted (it is only a 30-day safety net) and this carries on as if the list were empty. The time of the first failed read is kept
+// on this device only ('trashReadFailedAt'); a successful read clears it.
 const SELF_HEAL_MS = 3 * 86400000;
 async function readFailedAt() {
   const db = await import('./db.js');

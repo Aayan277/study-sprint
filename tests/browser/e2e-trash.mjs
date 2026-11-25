@@ -87,6 +87,7 @@ const review = (page, id, n = 2) => page.evaluate(async ([cid, k]) => {
   ok(await rows(page).count() === 1, 'the sheet lists the deleted card');
   const txt = await rows(page).first().textContent();
   ok(/1 card/.test(txt) && /2 reviews/.test(txt) && /Deleted today/.test(txt), 'the row shows its count line and "Deleted today"');
+  ok(/^Restore: /.test(await page.getAttribute('#trList [data-act="restore"]', 'aria-label')) && /^Delete now: /.test(await page.getAttribute('#trList [data-act="drop"]', 'aria-label')), 'Restore and Delete now start with their visible words (voice control)');
   ok(await page.getAttribute('#sheet .sheet-x', 'aria-label') === 'Close', 'icon-only controls have an aria-label (the sheet close button)');
   await page.click('#trList [data-act="restore"]');
   await page.waitForFunction(() => /#\/deck\/sample/.test(location.hash) && document.querySelectorAll('.crow').length === 12);

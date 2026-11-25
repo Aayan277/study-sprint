@@ -815,6 +815,7 @@ export async function drawSync() {
       try {
         // With a captcha set up (sync-config.js), the "are you a person?" box comes first; its token goes with the request.
         const captcha = await captchaToken();
+        claimAfterSignIn = null;
         const opts = { onConflict: askAboutDevice };      // cards here from someone else (or from no account) are never merged without a choice
         const made = await (create ? sync.createAccount(email, pw, captcha, opts) : sync.signIn(email, pw, captcha, opts));
         if (made?.pending) {                  // Supabase emailed a confirmation link: nobody is signed in yet
@@ -837,6 +838,7 @@ export async function drawSync() {
           });
           return;
         }
+        if (claimAfterSignIn) { try { await (await import('./trash.js')).claim(claimAfterSignIn); } catch (err) { console.error(err); } claimAfterSignIn = null; }
         db.setSetting('pendingSignup', null);
         toast(create ? 'Account created. Syncing…' : 'Signed in. Syncing…');
         drawSync();
@@ -969,6 +971,7 @@ export async function drawDamaged() {
 
 // Asked by sync.signIn / createAccount before anything is merged, when this device holds cards that aren't this account's.
 // Answers 'go' or 'cancel'. "Remove them" wipes this device first (the account that owns them keeps its copy).
+let claimAfterSignIn = null;
 function askAboutDevice(v, userId) {
   return new Promise(resolve => {
     let settled = false;
@@ -1007,8 +1010,8 @@ function askAboutDevice(v, userId) {
     $('devRemove')?.addEventListener('click', wipeThen);
     $('devFresh')?.addEventListener('click', wipeThen);
     $('devAdd')?.addEventListener('click', async () => {
-      // The cards are now this account's, so what was deleted from them while signed out (Recently deleted) is too. Only here: Cancel and Start fresh never claim it.
-      try { if (userId) await (await import('./trash.js')).claim(userId); } catch (err) { console.error(err); }
+      // The cards become this account's (and so does what was deleted from them while signed out) only once the sign-in has worked: see claimAfterSignIn. Cancel and Start fresh never claim it.
+      claimAfterSignIn = userId || null;
       finish('go'); closeSheet();
     });
   });
