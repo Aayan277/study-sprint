@@ -346,8 +346,6 @@
 :root[data-ui="clinical"][data-ui="clinical"]{ --r-lg:10px; --r-xl:12px; }
 :root[data-ui="clinical"][data-ui="clinical"] h1{font-size:1.5rem;font-weight:650;letter-spacing:-.018em}
 :root[data-ui="clinical"][data-ui="clinical"] .eyebrow{font-size:var(--fs-xs);color:var(--text-2);font-weight:500}
-:root[data-ui="clinical"][data-ui="clinical"] .section > h2,
-:root[data-ui="clinical"][data-ui="clinical"] .sec-head h2{font-size:var(--fs-sm);font-weight:600;color:var(--text-2);letter-spacing:0}
 
 /* ---------- Today: one summary panel ---------- */
 :root[data-ui="clinical"][data-ui="clinical"] .today-hero{padding:var(--s-4);border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line)}
@@ -541,9 +539,6 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck{box-shadow:none!important;min-height:52px}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdecks .tdeck + .tdeck{box-shadow:inset 0 1px 0 var(--line)!important}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams{box-shadow:0 0 0 1px var(--line-strong)}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .section > h2,
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sec-head h2{font-size:var(--fs-base);font-weight:650;color:var(--text)}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .section > h2{font-size:1.25rem;letter-spacing:-.015em}   /* Settings: real section headings, above the 16px row titles */
 
 /* ---------- Decks: one ruled list ---------- */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .decks{gap:0;box-shadow:0 0 0 1px var(--line-strong);border-radius:var(--r-md);overflow:hidden}
@@ -578,7 +573,7 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.side-set,.side-help){padding:0;border-radius:var(--r-sm)}
 
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main{padding:32px 40px 56px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{max-width:1120px;margin:0 auto}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{max-width:var(--page-w,1120px);margin:0 auto}
   /* Today's page width and its exams column: section 6 */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams{grid-template-columns:1fr!important}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams .exam-row + .exam-row{box-shadow:inset 0 1px 0 var(--line)!important}
@@ -751,8 +746,10 @@
   /* --- Settings: every control sits next to its label, in a column you can read across ---
      Switches come first on their line, like a checkbox, with the name and the explanation beside them; steppers, number
      boxes and buttons go under their label instead of out at the far edge of the row. */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row{grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:start}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row > .switch{grid-column:1;grid-row:1;margin-top:1px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row{grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:center}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row > .switch{grid-column:1;grid-row:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row:has(> span > span){align-items:start}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row:has(> span > span) > .switch{margin-top:1px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row > span{grid-column:2;grid-row:1;font-size:var(--fs-base);color:var(--text)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column){display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;row-gap:10px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column) > :first-child{justify-self:stretch}
@@ -941,3 +938,4 @@
 :root[data-ui="clinical"] .anki-sum{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:var(--s-2) 0;font-size:var(--fs-sm)}
 :root[data-ui="clinical"] .anki-sum .link{min-height:44px;padding:0 4px;border-radius:0;color:var(--accent-text)}
 @media (min-width:1024px) and (pointer:fine){:root[data-ui="clinical"] .anki-sum .link{min-height:36px}}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-add[aria-current]{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-strong)}

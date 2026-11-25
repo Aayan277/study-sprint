@@ -157,6 +157,9 @@ export function markCurrent() {
   document.querySelectorAll('#sideList .side-deck[data-key]').forEach(a => {
     if (a.dataset.key === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
+  // The import screen is the Add cards button's page.
+  const add = document.querySelector('.side-add');
+  if (add) { if (/^#\/import(\/|$|\?)/.test(location.hash)) add.setAttribute('aria-current', 'page'); else add.removeAttribute('aria-current'); }
   // On a deck page the deck row is the page; the Decks tab is only the section it belongs to.
   const decksTab = document.querySelector('.tab[data-tab="decks"]');
   if (id && decksTab) decksTab.setAttribute('aria-current', 'true');

@@ -32,7 +32,7 @@ import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
 import { refreshBadge } from './badge.js';
-import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, openSheet, closeSheet, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
+import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, openSheet, closeSheet, hideHint, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 import { go as navGo, replace as navReplace, holdBack, releaseBack } from './nav.js';
 
@@ -287,6 +287,7 @@ function backHTML(back) {
 }
 
 function renderSession(el, enter = false) {
+  hideHint();      // (a tooltip for a button the last card drew would stay on screen)
   if (!el.isConnected) return;       // you already moved to another screen: don't draw (or hide the tab bar) there
   R.el = el;
   if (!R.current) return finish(el);
@@ -336,15 +337,15 @@ function renderSession(el, enter = false) {
     <h1 class="sr-only">Review</h1>
     <div class="rv-head">
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
-      ${R.undo.length ? `<button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer">${icon('undo')}</button>` : ''}
-      <button class="link" type="button" id="scratchBtn" aria-pressed="${scratchPref()}" aria-keyshortcuts="D" aria-label="Scratchpad${singleKeysOn() ? ' (D)' : ''}" title="Scratchpad${singleKeysOn() ? ' (D)' : ''}">${PEN_ICON}</button>
-      <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">${icon('more')}</button>
+      ${R.undo.length ? `<button class="link" type="button" id="undoBtn" aria-label="Undo" data-hint="Undo the last answer"${singleKeysOn() ? ' data-hint-key="Z"' : ''}>${icon('undo')}</button>` : ''}
+      <button class="link" type="button" id="scratchBtn" aria-pressed="${scratchPref()}" aria-keyshortcuts="D" aria-label="Scratchpad${singleKeysOn() ? ' (D)' : ''}" data-hint="Scratchpad"${singleKeysOn() ? ' data-hint-key="D"' : ''}>${PEN_ICON}</button>
+      <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more" data-hint="More">${icon('more')}</button>
       <button class="link" type="button" id="endBtn">End</button>
     </div>`;
   const body = `
     <article class="flash rv-card${tiny ? ' tiny' : ''}${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped ? '' : `aria-labelledby="rvQ"${typeThis ? '' : ' aria-describedby="rvHint"'}`} ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
       ${canSpeak() || hasSounds(card, 'front') || hasSounds(card, 'back')
-        ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud' : 'Read aloud'}" title="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud (R)' : 'Read aloud (R)'}" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
+        ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud' : 'Read aloud'}" data-hint="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud' : 'Read aloud'}"${singleKeysOn() ? ' data-hint-key="R"' : ''} aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <div class="rv-turn">
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
           <h2 class="sr-only">Question</h2>
@@ -629,10 +630,10 @@ function revealStep(el, all = false) {
 }
 
 // ---------- scratchpad (B4) ----------
-// A scribble icon (not a pencil: that would look like Edit) in the top bar (or D) draws over the card with a pen, finger or mouse (scratchpad.js). On or off is remembered
+// A pencil icon (it is a drawing tool here, and the card menu's own Edit has a word beside it) in the top bar (or D) draws over the card with a pen, finger or mouse (scratchpad.js). On or off is remembered
 // on this device. The drawing is never saved: a new card starts clean, a flip keeps it, leaving Review throws it away.
 const SCRATCH_KEY = 'study-sprint-scratch';
-const PEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 13.5c2-6.5 4.5-7.5 5-3.5s2 5.5 4 .5 3.5-7 5-2 1.5 3 2.5 2.5"/><path d="M4 19.5h16"/></svg>';
+const PEN_ICON = icon('edit');
 const scratchPref = () => { try { return localStorage.getItem(SCRATCH_KEY) === '1'; } catch { return false; } };
 const setScratchPref = on => { try { localStorage.setItem(SCRATCH_KEY, on ? '1' : '0'); } catch { /* fine: it just isn't remembered */ } };
 let pad = null, padKey = 0, zoomWatch = null;

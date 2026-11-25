@@ -176,7 +176,7 @@ function calendarHTML(cal, now) {
       </div>
     </section>`;
 }
-function wireCalendar(el) {
+function wireCalendar(el, shortCal) {
   const box = el.querySelector('#calScroll');
   if (!box) return;
   const grid = el.querySelector('#calGrid');
@@ -192,6 +192,11 @@ function wireCalendar(el) {
     card.style.setProperty('--c', c + 'px');
     return true;
   };
+  // The whole year only when it fits the card at a normal square size (14px + 3px gap); otherwise the short version, as on a phone.
+  if (shortCal && box.clientWidth && weeks * 17 > box.clientWidth) {
+    const html = shortCal();
+    if (html) { card.outerHTML = html; wireCalendar(el); return; }
+  }
   sizeCells();
   if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (sizeCells()) box.scrollLeft = box.scrollWidth; }).observe(box);   // (back to the newest weeks only when the squares changed size)
   // Start scrolled to the newest weeks (on the right). A month name that starts before the left edge would show
@@ -300,7 +305,9 @@ export async function renderStats(el) {
     reviewable: () => D.hardest.filter(h => !isHidden(h.card, now)),       // "Review these" skips suspended and buried cards
     leechCount: () => cards.filter(c => (c.tags || []).includes('leech')).length,
     total30: () => D.perDay.reduce((n, d) => n + d.total, 0),
-    cal: () => calendarFromDays(pickedDays, now, 53, { rest, from: firstAnswerTime(pickedDays) }),
+    // The whole past year, with empty squares before the first study day. wireCalendar swaps in the short version (from the first study
+    // month) when the year does not fit the card at a normal square size (a phone, a half-width card).
+    cal: () => calendarFromDays(pickedDays, now, 53, { rest }),
     buttons: () => buttonCounts(recent, now),
     hours: () => hourly(recent, now),
     bands: () => difficultyBands(cardStates)
@@ -562,7 +569,7 @@ export async function renderStats(el) {
     };
     box.innerHTML = retSplitHTML(retentionByAge(mine, Date.now(), RS_PERIODS, { targetOf }), mine.some(l => l.timestamp >= daysAgoStart(89) && l.state === 2));
   }).catch(err => { console.error(err); const box = q('retSplit'); if (box) box.innerHTML = '<p class="muted">Couldn’t work this out.</p>'; });
-  wireCalendar(el);
+  wireCalendar(el, () => { const c = calendarFromDays(pickedDays, now, 53, { rest, from: firstAnswerTime(pickedDays) }); return c.weeks.length < D.cal.weeks.length ? calendarHTML(c, now) : null; });
   q('planRest')?.addEventListener('click', async () => {
     (await import('./streak-sheet.js')).openStreakSheet({ onChange: () => renderStats(el), returnFocus: 'planRest' });
   });

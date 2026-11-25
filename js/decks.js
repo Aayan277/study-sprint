@@ -204,7 +204,7 @@ export async function renderLibrary(el) {
     </div>`}
     ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p id="cardHits"><span id="cardHitsLive" aria-live="polite"></span></p><p class="note" id="deckNone" hidden></p>`
     : emptyStartHTML()}
-    ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards →</a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
+    ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards <span aria-hidden="true">→</span></a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
   `;
 
   // The tiles are drawn from the search text and the sort, so both just redraw this part.

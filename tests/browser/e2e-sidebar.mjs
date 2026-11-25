@@ -121,7 +121,8 @@ ok(true, 'renaming a deck updates the list');
 // + Add cards
 await p.click('.side-add'); await p.waitForSelector('main[data-route=import]');
 ok(p.url().endsWith('#/import'), '+ Add cards goes to Import');
-ok((await p.getAttribute('.tab[data-tab=decks]', 'aria-current')) === 'page', 'Import counts as the Decks section');
+// (UI #12: on a computer the Add cards button is the current item on the import screen, not Decks)
+ok((await p.getAttribute('.side-add', 'aria-current')) === 'page' && (await p.getAttribute('.tab[data-tab=decks]', 'aria-current')) === null, 'Import marks the Add cards button as current, not Decks');
 
 // the heading folds the list, remembered after a reload
 await go(p, '#/today', '#startBtn');

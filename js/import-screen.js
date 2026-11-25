@@ -492,14 +492,15 @@ function wireDoc() {
   });
   $('aiBack').addEventListener('click', pasteAnswer);
   $('pasteAnsBtn').addEventListener('click', pasteAnswer);
-  // One primary button in the paste area: the answer button while the Claude note or the AI view shows, else Suggest cards.
+  // One primary button in the paste area: the answer button while the Claude note or the AI view shows; once a preview has cards, the
+  // Add button is the only filled one; else Suggest cards.
   const syncPrimary = () => {
-    const answer = !$('claudeNote').hidden || !$('aiView').hidden;
+    const answer = !$('claudeNote').hidden || !$('aiView').hidden || !$('preview').hidden;
     $('suggestBtn').classList.toggle('primary', !answer);
     $('suggestBtn').classList.toggle('ghost', answer);
   };
   const mo = new MutationObserver(syncPrimary);
-  for (const id of ['claudeNote', 'aiView']) mo.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+  for (const id of ['claudeNote', 'aiView', 'preview']) mo.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
   syncPrimary();
 }
 
