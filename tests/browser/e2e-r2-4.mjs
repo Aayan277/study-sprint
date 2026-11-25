@@ -15,17 +15,23 @@ await p.goto(URL + '#/today'); await p.reload(); await p.waitForSelector('#start
 const rate = async n => { await p.click('#showBtn'); await p.click(`.rate.r${n}`); await p.waitForTimeout(250); };
 await p.click('#startBtn'); await p.waitForSelector('#flash');
 await rate(4);                              // Easy: not missed
-await p.click('#endBtn'); await p.waitForSelector('.fin-missed');
-ok((await p.textContent('.fin-missed')).trim() === '0 missed' && await p.locator('#missedBtn').count() === 0, 'nothing rated Again: "0 missed" and no button');
+await p.click('#endBtn'); await p.waitForSelector('.finish-next');
+ok(await p.locator('.fin-missed').count() === 0 && await p.locator('#missedBtn').count() === 0, 'nothing rated Again: no missed line and no button');
 await p.click('#againBtn'); await p.waitForSelector('#startBtn');
 await p.click('#startBtn'); await p.waitForSelector('#flash');
 await rate(1); await rate(4);               // one Again, one Easy
 await p.click('#endBtn'); await p.waitForSelector('.fin-missed');
 ok(/^1 missed/.test((await p.textContent('.fin-missed')).trim()) && await p.locator('#missedBtn').count() === 1, 'one card rated Again: "1 missed" and "Go over these"');
 ok((await p.textContent('#missedBtn')).trim() === 'Go over these', 'the button says Go over these');
-await p.click('#missedBtn'); await p.waitForSelector('#flash');
-const left = (await p.textContent('.rv-counts')).replace(/\D+/g, ' ').trim().split(' ').map(Number).reduce((a, b) => a + b, 0);
-ok(left === 1, 'it starts a session of just that card: ' + left + ' card to go');
-ok(/Missed cards/.test(await p.textContent('.flash-deck')), 'the session is named "Missed cards": ' + (await p.textContent('.flash-deck')).trim());
+// Go over these is a practice pass: it saves nothing, even with Play set to count as reviews
+await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('playCountsAsReviews', true); });
+const snap = () => p.evaluate(async () => { const db = await import('./js/db.js'); return JSON.stringify([(await db.getAll('reviewLog')).length, await db.getAll('cardStates')]); });
+const before = await snap();
+await p.click('#missedBtn'); await p.waitForSelector('#pCard');
+ok((await p.evaluate(() => location.hash)) === '#/play', 'it opens a practice pass in Play');
+await p.waitForTimeout(600);
+await p.evaluate(() => { const o = document.querySelector('#options:not([hidden]) .opt'); if (o) o.click(); else { const i = document.querySelector('#pInput'); i.value = 'zzz'; document.querySelector('#pType').requestSubmit(); } });
+await p.waitForTimeout(1500);
+ok((await snap()) === before, 'answering wrote no review log and changed no schedule (even with Play counting as reviews)');
 ok(errors.length === 0, 'no page errors: ' + errors.join('|'));
 await browser.close();

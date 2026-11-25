@@ -919,10 +919,9 @@ async function finish(el) {
     return inScope.has(c.deckId) && st && st.state !== NEW && st.due <= tomorrowEnd;
   }).length;
   const streak = await loadStreak(null, { settings: R.settings });
-  // Cards rated Again in this session (from the answers kept for Undo; nothing is stored). "Go over these" is the same custom session as
-  // Study by tag or "Review these": a queue of exactly these cards (suspended or buried ones, such as a new leech, are left out of it).
+  // Cards rated Again in this session (from the answers kept for Undo; nothing is stored). "Go over these" is a practice pass in Play (a
+  // drill of exactly these cards, a new leech that got suspended too) that saves nothing: no review log, no schedule change.
   const missedIds = [...new Set(R.undo.filter(u => u.again).map(u => u.item.card.id))];
-  const missedLeft = missedIds.length ? customQueue('ids', data, countFor(data, allIds).cards, 3, missedIds).queue.length : 0;
   // You may have switched to another screen while that loaded: don't draw over it.
   if (!R || !location.hash.startsWith('#/review')) return;
   if (reviewed) noteSession();            // a finished session: Today may now offer to install the app (install.js)
@@ -934,7 +933,7 @@ async function finish(el) {
   el.innerHTML = `
     <div class="screen-head"><div><h1>${title}</h1></div></div>
     <p class="fin-line">${[plural(cardsDone, 'card'), `${acc}% right`, spentText, `${dueTomorrow.toLocaleString('en')} due tomorrow`].join(' · ')}</p>
-    <p class="fin-missed"><b>${missedIds.length} missed</b>${missedLeft ? ' <button class="btn ghost small" type="button" id="missedBtn">Go over these</button>' : ''}</p>
+    ${missedIds.length ? `<p class="fin-missed"><b>${missedIds.length} missed</b> <button class="btn ghost small" type="button" id="missedBtn">Go over these</button></p>` : ''}
     ${reviewed > cardsDone ? `<p class="note">${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}.</p>` : ''}
     <div class="res-actions">
       ${goOn
@@ -958,10 +957,9 @@ async function finish(el) {
   });
   $('missedBtn')?.addEventListener('click', async () => {
     R = null; publishLive();
-    const { startStudy } = await import('./today.js');
-    const before = location.hash;
-    await startStudy({ kind: 'ids', cardIds: missedIds, label: 'Missed cards' });
-    if (location.hash === before && el.isConnected) renderReview(el);       // (the same address: nothing would redraw)
+    const { setPendingDrill } = await import('./play.js');
+    setPendingDrill(missedIds);
+    navGo('#/play');
   });
   $('undoLast')?.addEventListener('click', () => undo(el));
   const slot = $('finishMore'), cardIds = [...R.answered], leechIds = [...R.leeches];

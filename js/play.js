@@ -47,6 +47,9 @@ let G = null;      // the round in progress
 let data = null;   // decks, cards and settings loaded for the setup screen
 // Has the deck been picked in this visit? Until it has, Play opens on the deck with the nearest exam (see defaultDeck).
 let deckChosen = false;
+// "Go over these" on Review's finish screen: a practice pass over cards (ids) that saves nothing, whatever the "count as reviews" setting says.
+let pendingDrill = null;
+export const setPendingDrill = ids => { pendingDrill = ids; };
 let customOpen = null;     // is the "Customise" fold open? (read from this device's saved choice the first time)
 
 const fmtClock = ms => { const s = Math.ceil(Math.max(0, ms) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -144,6 +147,17 @@ export async function renderPlay(el) {
   if (settings.playPrefs && (wanted !== prefs.deckId && (wanted === 'all' || !decks.some(d => d.id === wanted)))) db.setSetting('playPrefs', { ...prefs });
   if (customOpen === null) customOpen = foldOpen('play-custom');
   let pace = settings.timer;
+
+  // A practice pass handed over by Review's finish screen: a drill of those cards (suspended ones too), never saved.
+  if (pendingDrill) {
+    const ids = new Set(pendingDrill); pendingDrill = null;
+    const drill = everyCard.filter(c => ids.has(c.id)).map(c => playCopy(lone.has(c.id) ? unpaired(c) : c));
+    const have = new Set(cards.map(c => c.id));
+    const pool = [...cards, ...drill.filter(c => !have.has(c.id))];
+    const mcOk = canMultipleChoice(pool, 'front') && (canMultipleChoice(pool, 'back') || drill.some(isFrontOnly));
+    const qtype = mcOk ? 'front' : 'typing';
+    if (playableCards(drill, qtype).length) { start(el, { ...prefs, qtype, pace, pool, drill, practiceOnly: true }); return; }
+  }
 
   // The question type a deck starts on: Typing when most of its cards are typing cards (type-in.js), else by the length of the backs.
   // Remembered per pool (the cards are checked again only when the deck's cards change).
@@ -555,7 +569,7 @@ async function record(round, entry) {
   // Practice only (the default, Settings > "Count Play and test answers as reviews" off): nothing is saved. No schedule or FSRS
   // change, no review-log row (so no stats, heatmap, streak, readiness or Today ring), no new card started, no leech.
   // The round's own score, bests and results come from the round itself, not from the log.
-  if (!countsAsReviews()) { entry.decision = 'practice'; return; }
+  if (!countsAsReviews() || round.practiceOnly) { entry.decision = 'practice'; return; }      // (a practice pass from Review's finish screen never counts)
   // The rest is shared with the Practice test (practice-save.js).
   await savePracticeAnswer(data, entry, { source: 'play', qtype: round.qtype, fmt: round.fmt, hard: round.hard,
     untimed: !!round.untimed && round.fmt !== 'lightning', afterApply: (card, prev, next, log) => checkLeech(round, card, prev, next, log) });
@@ -692,7 +706,7 @@ function next() {
 async function scheduleSummary(round) {
   await round.saving;                          // wait for the last answers to finish saving
   if (!round.log.length) return '';
-  if (!countsAsReviews()) return '';
+  if (!countsAsReviews() || round.practiceOnly) return '';
   return scheduleSummaryHTML(round.log);
 }
 
@@ -809,7 +823,7 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
   }));
   const slot = $('resultsMore'), cardIds = [...new Set(round.log.map(l => l.card.id))], leechIds = [...round.leeches], entries = round.log;
   if (!again) import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'play', cardIds, leechIds, entries })).catch(err => console.error(err));
-  const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, untimed: round.untimed, pool: round.source };
+  const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, untimed: round.untimed, pool: round.source, practiceOnly: round.practiceOnly };
   $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill } : base));
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
