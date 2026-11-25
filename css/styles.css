@@ -1018,7 +1018,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .slider-row output b{color:var(--text);font:600 var(--fs-md) var(--f-num)}
 .start-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:6px 0 4px}
 .start-row .btn{padding:14px 30px;font-size:1.05rem}
-@media (min-width:701px){:root:not([data-ui="clinical"]) main[data-route="play"] .start-row .btn{flex:1 1 240px;min-width:240px}}
+@media (min-width:701px){:root:not([data-ui="clinical"]) main[data-route="play"] .start-row .btn{flex:1 1 100%;min-width:240px}}
 /* Round 4 (Original style): one label style on Play and Settings */
 :root:not([data-ui="clinical"]) main[data-route="play"] legend,
 :root:not([data-ui="clinical"]) main[data-route="settings"] .set-sub{color:var(--text-2);font-weight:600;font-size:var(--fs-sm)}
@@ -1659,7 +1659,7 @@ img[data-media][hidden]{display:none}
   /* Original style: every screen starts at the same left edge (the centred 760px and 900px columns used to sit at their own x); only the focused review stays centred */
   :root:not([data-ui="clinical"]) body:not(.focus) main > .view{margin-left:max(0px,calc((100% - var(--page-w)) / 2));margin-right:auto}
   /* (the narrow screens are one centred column: the view itself is capped, not just what is in it, so nothing hangs on the left of an empty page) */
-  main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view{max-width:760px}
+  main:is([data-route="settings"],[data-route="import"]) > .view{max-width:760px}
   :root:not([data-ui="clinical"]) main[data-route="help"] > .view{max-width:760px}
   main[data-route="review"] > .view{max-width:780px}
   main[data-route="browse"] > .view{max-width:900px}

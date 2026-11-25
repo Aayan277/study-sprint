@@ -381,12 +381,13 @@ for (const ui of ['original', 'clinical']) {
   await seedDecks(d);
   const gaps = async sel => d.evaluate(sel => { const m = document.querySelector('main').getBoundingClientRect(), v = document.querySelector(sel).getBoundingClientRect(); return [Math.round(v.left - m.left), Math.round(m.right - v.right), Math.round(v.width)]; }, sel);
   await go(d, '#/decks', '.deck'); const leftToday = (await gaps('main > .view'))[0];
-  for (const [hash, wait, name] of [['#/settings', '#exportBtn', 'Settings'], ['#/import', '#pasteBox', 'Import'], ['#/play', '#startBtn', 'Play']]) {
+  for (const [hash, wait, name] of [['#/settings', '#exportBtn', 'Settings'], ['#/import', '#pasteBox', 'Import']]) {
     await go(d, hash, wait);
     const [l, r, w] = await gaps('main > .view');
     // (round 4: in the Original style the narrow columns sit on the same left edge as Today; Clinical keeps them centred)
     ok(ui === 'original' ? Math.abs(l - leftToday) <= 2 && w <= 1000 : Math.abs(l - r) <= 2 && w <= 1000 && l > 40, `M9 (${ui}): ${name} is a ${ui === 'original' ? 'left-aligned' : 'centred'} column (left ${l}px, right ${r}px, ${w}px wide)`);
   }
+  await go(d, '#/play', '#startBtn'); { const [, , w] = await gaps('main > .view'); ok(w >= 1000, `M9 (${ui}): Play is full width like Today, Decks and Stats (${w}px)`); }
   await go(d, '#/browse', '.crow');
   { const [l, r, w] = await gaps('main > .view'); ok((ui === 'original' ? Math.abs(l - leftToday) <= 2 : Math.abs(l - r) <= 2) && w <= 900, `M9 (${ui}): Browse is ${ui === 'original' ? 'left-aligned' : 'centred'} and at most 900px wide (left ${l}, right ${r}, ${w}px)`); }
   await go(d, '#/deck/B', '.crow');

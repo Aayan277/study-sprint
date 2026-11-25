@@ -99,13 +99,13 @@ for (const [n, h, s] of [['today', '#/today', '.today-hero'], ['decks', '#/decks
   edges[n] = await d.evaluate(() => { const v = document.querySelector('main > .view'), r = v.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(v.querySelector('h1').getBoundingClientRect().left)]; });
 }
 // (UI audit M9, intended change: the wide screens share one left edge and 1120px; the narrow columns (Play, Settings, Browse) are centred in the same space)
-const wide = ['today', 'decks', 'stats'].map(n => edges[n]);
-ok(wide.every(e => e[0] === edges.today[0] && e[1] === 1120 && e[2] === edges.today[0]), 'Today, Decks and Stats share one left edge and are 1120px wide: ' + JSON.stringify(wide));
+const wide = ['today', 'decks', 'stats', 'play'].map(n => edges[n]);
+ok(wide.every(e => e[0] === edges.today[0] && e[1] === 1120 && e[2] === edges.today[0]), 'Today, Decks, Stats and Play share one left edge and are 1120px wide: ' + JSON.stringify(wide));
 const mainBox = await d.evaluate(() => { const m = document.querySelector('main').getBoundingClientRect(); return [Math.round(m.left), Math.round(m.right)]; });
 // (round 4, intended change: the narrow columns start at the same left edge as Today and Decks instead of floating in the middle)
-ok(['play', 'settings', 'browse'].every(n => Math.abs(edges[n][0] - edges.today[0]) <= 2 && edges[n][1] <= 976)   /* (UI #6: Settings is 760px plus its side list, 976px) */, 'Play, Settings and Browse are narrow columns on the same left edge as Today: ' + JSON.stringify(['play', 'settings', 'browse'].map(n => edges[n])));
+ok(['settings', 'browse'].every(n => Math.abs(edges[n][0] - edges.today[0]) <= 2 && edges[n][1] <= 976)   /* (UI #6: Settings is 760px plus its side list, 976px) */, 'Settings and Browse are narrow columns on the same left edge as Today: ' + JSON.stringify(['settings', 'browse'].map(n => edges[n])));
 await go(d, '#/play', '#startBtn');
-ok(await d.$eval('#startBtn', e => e.getBoundingClientRect().width <= 760), 'Play keeps a 760px reading column inside it');
+ok(await d.$eval('#startBtn', e => e.getBoundingClientRect().width > 1000) && await d.$eval('#pDeck', e => e.getBoundingClientRect().width > 1000), 'Play is the full page width: the deck field and Start round fill the row');
 await go(d, '#/today', '.today-hero');
 ok(await css(d, '.th-big', 'fontSize') === '36px', "Today's hero heading is larger on desktop");
 ok(await d.$eval('.today-hero .ring', e => e.getBoundingClientRect().width) > 100, "Today's ring is larger on desktop");
