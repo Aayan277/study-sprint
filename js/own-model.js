@@ -16,7 +16,7 @@
 //   score   is this answer scored (a card's first answer is not)
 //   y       1 if you passed (not Again), else 0
 import { mulberry32 } from './fsrs-fit.js';
-import { OwnFeatures } from './own-features.js';
+import { OwnFeatures, f3Of, f6Of, f7Of, f8Of } from './own-features.js';
 import { headFromRaw, pAt, largestDayAtLeast } from './own-curve.js';
 import {
   CURVE, DEFAULT_SIZE, DECAY_STREAMS, F, F_HEAD, HEAD_OUT, K, STABILITY_INIT_DAYS, STREAMS, TAU_MAX_DAYS, TAU_MIN_DAYS,
@@ -124,33 +124,24 @@ export function createOwnModel(params, size = DEFAULT_SIZE) {
   }
   const headOf = (dec, f) => headFromRaw(headRaw(dec, f));
 
-  // The interval for a target R when the note memory fades before the card comes back.
-  //   next: the four states right after an answer ({ card, note, deck, user }); fq: the query features (OwnFeatures.features(row, true)).
-  // After t days the note memory has relaxed by t (deck and you by 0, as they will have been used again); the other query features are as of the
-  // answer, not of the review. So p(t) = pAt(head(states faded by t), t) is lower than the curve read straight after the answer. Returns the largest whole
-  // day in 1..maxDays with p >= target (at least 1), or null when p is not a real number. Only the note part of the head's first layer
-  // depends on t, so the rest of it is computed once.
-  function fadedDays(next, fq, target, maxDays) {
+  // The chance of passing as a function of the gap t (days), when the card comes back t days after the answer that left `next`:
+  // returns pOf(t) = pAt(head(states with the note memory faded by t), t). The head's other inputs are
+  //   fresh = null: the query features fq as of the answer (stale for f3 and f8, one answer behind for f6 and f7). This is what the app does today.
+  //   fresh = { noteGap0 = 0, age0, answers, lapses, neutral = [0,0,0,0,0] }: the features as training saw them at the NEXT review:
+  //     f3 = log1p(noteGap0 + t) / 5, f8 = log1p(age0 + t) / 6 (age0: whole days from the card's first day to the day of the answer),
+  //     f6 and f7 from answers and lapses counted AFTER the answer, and f4, f5, f9, f10, f11 from `neutral` (an array [f4, f5, f9, f10, f11],
+  //     or an object with those keys). The note memory still fades by t; deck and you by 0, unless fresh.decayAll is true (the "schedule read v2":
+  //     deck and you fade by t too, with their own learned times, exactly as the note does; with neutral zeros and noteGap0 0 this is
+  //     S(t) = pAt(head(card, note, deck, you all faded by t, f3 = f3Of(t), f4 = f5 = 0, f6/f7 = counters after the answer, f8 = f8Of(age0 + t), f9..f11 = 0), t)).
+  // Only the part of the head's first layer that depends on t is recomputed for each t.
+  function fadedP(next, fq, fresh = null) {
     const base = decayAll(next, { note: 0, deck: 0, user: 0 });
     const q = new Float64Array(qn);
     let at = 0;
     for (const tag of STREAMS) { q.set(base[tag], at); at += s[tag]; }
-    for (let i = 0; i < F_HEAD; i++) q[at + i] = fq[HEAD_FROM + i];
     const w1 = O('head.W1'), b1 = O('head.b1'), w2 = O('head.W2'), b2 = O('head.b2'), n0 = s.card, n1 = s.card + s.note;
-    const pre = new Float64Array(hid);
-    for (let i = 0; i < hid; i++) {
-      let a = params[b1 + i];
-      for (let j = 0, r = w1 + i * qn; j < qn; j++) if (j < n0 || j >= n1) a += params[r + j] * q[j];
-      pre[i] = a;
-    }
-    const u = new Float64Array(hid), raw = new Float64Array(HEAD_OUT);
-    const pOf = t => {
-      const note = decayStream('note', next.note, t);
-      for (let i = 0; i < hid; i++) {
-        let a = pre[i];
-        for (let j = 0, r = w1 + i * qn + n0; j < s.note; j++) a += params[r + j] * note[j];
-        u[i] = Math.tanh(a);
-      }
+    const pre = new Float64Array(hid), u = new Float64Array(hid), raw = new Float64Array(HEAD_OUT);
+    const finish = t => {
       for (let k = 0; k < HEAD_OUT; k++) {
         let a = params[b2 + k];
         for (let i = 0, r = w2 + k * hid; i < hid; i++) a += params[r + i] * u[i];
@@ -158,6 +149,59 @@ export function createOwnModel(params, size = DEFAULT_SIZE) {
       }
       return pAt(headFromRaw(raw), t);
     };
+    if (!fresh) {
+      for (let i = 0; i < F_HEAD; i++) q[at + i] = fq[HEAD_FROM + i];
+      for (let i = 0; i < hid; i++) {
+        let a = params[b1 + i];
+        for (let j = 0, r = w1 + i * qn; j < qn; j++) if (j < n0 || j >= n1) a += params[r + j] * q[j];
+        pre[i] = a;
+      }
+      return t => {
+        const note = decayStream('note', next.note, t);
+        for (let i = 0; i < hid; i++) {
+          let a = pre[i];
+          for (let j = 0, r = w1 + i * qn + n0; j < s.note; j++) a += params[r + j] * note[j];
+          u[i] = Math.tanh(a);
+        }
+        return finish(t);
+      };
+    }
+    // fresh: columns at+0 (f3) and at+5 (f8) depend on t, as does the note block (and, with decayAll, the deck and you blocks); everything else is fixed
+    const nz = fresh.neutral || [0, 0, 0, 0, 0];
+    const [n4, n5, n9, n10, n11] = Array.isArray(nz) || ArrayBuffer.isView(nz) ? [nz[0] || 0, nz[1] || 0, nz[2] || 0, nz[3] || 0, nz[4] || 0] : [nz.f4 || 0, nz.f5 || 0, nz.f9 || 0, nz.f10 || 0, nz.f11 || 0];
+    const noteGap0 = fresh.noteGap0 || 0, age0 = fresh.age0 || 0, c3 = at, c8 = at + 5, all = !!fresh.decayAll, n2 = n1 + s.deck, n3 = n2 + s.user;
+    q[at + 1] = n4; q[at + 2] = n5; q[at + 3] = f6Of(fresh.answers || 0); q[at + 4] = f7Of(fresh.lapses || 0);
+    q[at + 6] = n9; q[at + 7] = n10; q[at + 8] = n11;
+    const fixedCol = j => (j < n0 || (all ? j >= n3 : j >= n1)) && j !== c3 && j !== c8;
+    for (let i = 0; i < hid; i++) {
+      let a = params[b1 + i];
+      for (let j = 0, r = w1 + i * qn; j < qn; j++) if (fixedCol(j)) a += params[r + j] * q[j];
+      pre[i] = a;
+    }
+    return t => {
+      const note = decayStream('note', next.note, t), f3 = f3Of(noteGap0 + t), f8 = f8Of(age0 + t);
+      const deck = all ? decayStream('deck', next.deck, t) : null, user = all ? decayStream('user', next.user, t) : null;
+      for (let i = 0; i < hid; i++) {
+        const r = w1 + i * qn;
+        let a = pre[i] + params[r + c3] * f3 + params[r + c8] * f8;
+        for (let j = 0, rn = r + n0; j < s.note; j++) a += params[rn + j] * note[j];
+        if (all) {
+          for (let j = 0, rn = r + n1; j < s.deck; j++) a += params[rn + j] * deck[j];
+          for (let j = 0, rn = r + n2; j < s.user; j++) a += params[rn + j] * user[j];
+        }
+        u[i] = Math.tanh(a);
+      }
+      return finish(t);
+    };
+  }
+
+  // The interval for a target R when the note memory fades before the card comes back.
+  //   next: the four states right after an answer ({ card, note, deck, user }); fq: the query features (OwnFeatures.features(row, true));
+  //   fresh: null (the default: the other query features are as of the answer) or the object described at fadedP.
+  // So p(t) = pAt(head(states faded by t), t) is lower than the curve read straight after the answer. Returns the largest whole
+  // day in 1..maxDays with p >= target (at least 1), or null when p is not a real number.
+  function fadedDays(next, fq, target, maxDays, fresh = null) {
+    const pOf = fadedP(next, fq, fresh);
     const p1 = pOf(1);
     if (!Number.isFinite(p1)) return null;
     return largestDayAtLeast(t => (t === 1 ? p1 : pOf(t)), target, maxDays);
@@ -267,6 +311,6 @@ export function createOwnModel(params, size = DEFAULT_SIZE) {
   return {
     size, sizes: s, params, paramCount: params.length,
     initVector: tag => params.slice(O(`${tag}.h0`), O(`${tag}.h0`) + s[tag]),
-    decayAll, headRaw, headOf, fadedDays, advance, predictChunk, trainChunk
+    decayAll, headRaw, headOf, fadedP, fadedDays, advance, predictChunk, trainChunk
   };
 }

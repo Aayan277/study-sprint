@@ -7,7 +7,7 @@
 //   answer { ... }         a real answer happened: update the memory, and (real reviews of Review cards only) store a shadow record
 //   undo { logId }         take an answer back
 //   plan { ... }           the days Hard, Good and Easy would give, worked out before the card is turned
-//   status / check / setOn / notePlan / dismissNotice / flush / stale / close
+//   status / check / setOn / setTrust / notePlan / dismissNotice / flush / stale / close
 // Shadow record lifecycle (store 'preds'): the two numbers are fixed from the state before the answer (pOwn comes from the engine's
 // prediction, which never sees the rating; pFsrs is handed in by the caller, worked out before FSRS rated the card). The record is written
 // with y = null first, and y (1 remembered, 0 forgot) is filled in afterwards. Undo removes it. Reviews that arrive by sync, import or
@@ -25,7 +25,8 @@ const SAVE_EVERY = 20;            // answers between saves of the memory
 const SAVE_IDLE_MS = 2000;        // ... or this long after the last answer
 const CHUNK = 5000;               // entries per database transaction when saving a whole memory
 const tick = () => new Promise(r => setTimeout(r, 0));
-const DEFAULT_SETTINGS = { on: false, autoLocked: false };
+// trustTest / trustSince / trustUntil: the opt-in trust test (js/own-trust.js): its switch, when it started, when it was switched off (null while it runs)
+const DEFAULT_SETTINGS = { on: false, autoLocked: false, trustTest: false, trustSince: null, trustUntil: null };
 
 export class OwnCore {
   constructor({ idb, now = Date.now } = {}) {
@@ -58,6 +59,7 @@ export class OwnCore {
       case 'status': return this.getStatus();
       case 'check': return this.check(p);
       case 'setOn': return this.setOn(p);
+      case 'setTrust': return this.setTrust(p);
       case 'notePlan': return this.notePlan(p);
       case 'dismissNotice': return this.dismissNotice();
       case 'stale': return this.markStale();
@@ -290,17 +292,18 @@ export class OwnCore {
 
   // ---------- plans ----------
   // payload: { card, decks, now, ms, target, maxDays } -> { days: { 2, 3, 4 }, modelSha } | { skip } | { fail }
-  async plan({ card, decks = [], now, ms, target, maxDays }) {
+  // trust: true asks for the trust test's plan (only while its switch is on): the "v2" read, for cards in review or relearning.
+  async plan({ card, decks = [], now, ms, target, maxDays, trust = false }) {
     if (!this.engine || this.status !== 'fresh') return this.status === 'stale' ? { fail: 'stale' } : { skip: this.status };
     try {
       const seen = await this._sync();                                  // another tab may have switched Own off or removed the model
       if (seen !== 'ok') return { skip: seen };
-      if (!this.settings.on) return { skip: 'off' };
+      if (!this.settings.on || (trust && !this.settings.trustTest)) return { skip: 'off' };
       const rows = modelRows([{ id: -1, cardId: card.id, timestamp: now, source: 'review', rating: 3, ms }], [card], decks);
       if (!rows.length || !this.engine.hasCard(rows[0].cardKey)) return { fail: 'unknown-card' };
-      const days = this.engine.daysForButtons(rows[0], ms, target, Math.min(maxDays, OWN_MAX_DAYS));
+      const days = this.engine.daysForButtons(rows[0], ms, target, Math.min(maxDays, OWN_MAX_DAYS), trust ? { sched: 'v2' } : undefined);
       if (!days || ![2, 3, 4].every(g => Number.isFinite(days[g]) && days[g] > 0)) return { fail: 'bad-numbers' };
-      return { days: { 2: days[2], 3: days[3], 4: days[4] }, modelSha: this.model.sha256, scheduler: this.state && this.state.scheduler === 'own' ? 'own' : 'fsrs' };
+      return { days: { 2: days[2], 3: days[3], 4: days[4] }, modelSha: this.model.sha256, trust: trust === true, scheduler: this.state && this.state.scheduler === 'own' ? 'own' : 'fsrs' };
     } catch (err) {
       await this._bump('errors').catch(() => {});
       return { fail: 'error', message: String(err && err.message || err) };
@@ -347,10 +350,24 @@ export class OwnCore {
       const r = nextScheduler(this.state, { on: false }, today);
       this._applySwitch(r);
       this.settings = { ...this.settings, on: false };
+      if (this.settings.trustTest) this.settings = { ...this.settings, trustTest: false, trustUntil: this.now() };      // the trust test needs Own switched on
       if (!r.switched) this.state = { ...this.state, scheduler: 'fsrs' };
     }
     await this._saveSettings(); await this._saveState();
     return { ok: true, on: this.settings.on, scheduler: this.state.scheduler };
+  }
+
+  // The trust test's switch. On needs a loaded model and Own's switch on; the start time is kept when it is turned on again. Off stops it (the review
+  // log keeps what it saw, so the results stay).
+  async setTrust({ on }) {
+    await this._sync();
+    if (!this.model) { const o = await this.open({}); if (!o.loaded) return { ok: false, message: 'Load a model file first.' }; }
+    if (on && !this.settings.on) return { ok: false, message: 'Turn on Use my own model first.' };
+    const t = this.now(), s = this.settings;
+    this.settings = on ? { ...s, trustTest: true, trustSince: Number.isFinite(s.trustSince) ? s.trustSince : t, trustUntil: null }
+      : { ...s, trustTest: false, trustUntil: s.trustTest ? t : s.trustUntil ?? null };
+    await this._saveSettings();
+    return { ok: true, trustTest: this.settings.trustTest, trustSince: this.settings.trustSince, trustUntil: this.settings.trustUntil };
   }
 
   async _records() {
@@ -406,6 +423,7 @@ export class OwnCore {
       scheduler: s.scheduler === 'own' ? 'own' : 'fsrs', paused: s.errorPauseUntil != null && today < s.errorPauseUntil, pausedUntilDay: s.errorPauseUntil ?? null,
       memory: this.status, verdict: s.verdict || null, verdicts: s.verdicts || [], switches: s.switches || [], noticePending: s.noticePending ?? null,
       fallbacks: s.fallbacks || 0, errors: s.errors || 0, plansToday: s.plans && s.plans.day === today ? s.plans : { day: today, total: 0, failed: 0 },
+      trustTest: this.settings.trustTest === true && this.settings.on === true, trustSince: this.settings.trustSince ?? null, trustUntil: this.settings.trustUntil ?? null,
       records, scored: this.fp ? this.fp.scored : 0, minScored: MIN_SCORED, lastCheckDay: s.lastCheckDay ?? null, watchDay: s.watchDay ?? null
     };
   }

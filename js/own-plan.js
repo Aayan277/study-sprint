@@ -6,13 +6,19 @@ export const OWN_BAND_HIGH = 4;          // ... and never longer than this times
 export const OWN_MAX_DAYS = 3650;        // ... and never longer than 10 years
 export const PLAN_MAX_AGE_MS = 3600000;  // a plan older than an hour is not used
 export const PLAN_MS = 300;              // how long the buttons wait for a plan (review.js); after that FSRS schedules the card
+export const TRUST_RATIO = Math.SQRT2;   // the trust rule (opt-in experiment): Own's gap is used when it is more than this times FSRS's gap
+
+// The trust rule for one button: does Own's gap replace FSRS's? Yes after a lapse (the card was in relearning when answered), or when Own
+// plans more than TRUST_RATIO times FSRS's exact gap. Otherwise FSRS keeps its own gap.
+export const trustUsesOwn = (afterLapse, ownDays, fsrsDays) => !!afterLapse || ownDays > TRUST_RATIO * fsrsDays;
 
 // Is this plan usable for this very answer? plan: { cardId, lastReview, at, days: { 2, 3, 4 } }
-//   state: the card's saved state before the answer; next: the state FSRS has just worked out (state numbers: 2 = Review)
-export function planFits(plan, cardId, state, nextState, rating, now) {
+//   state: the card's saved state before the answer; next: the state FSRS has just worked out (state numbers: 2 = Review, 3 = Relearning)
+//   trust: the trust rule is on for this card: a card in relearning that FSRS moves back to review also fits (after a lapse)
+export function planFits(plan, cardId, state, nextState, rating, now, trust = false) {
   return !!plan && plan.cardId === cardId && plan.lastReview === (state?.lastReview ?? null)
     && Math.abs(now - plan.at) < PLAN_MAX_AGE_MS
-    && state?.state === 2 && nextState === 2
+    && (state?.state === 2 || (trust === true && state?.state === 3)) && nextState === 2
     && [2, 3, 4].includes(rating) && [2, 3, 4].every(r => Number.isFinite(plan.days?.[r]) && plan.days[r] > 0);
 }
 

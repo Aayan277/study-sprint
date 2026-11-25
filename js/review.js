@@ -42,6 +42,7 @@ let R = null;
 // (js/own-gate.js). Otherwise null, and every use below does nothing at all.
 let ownHook = null;
 let ownLib = null;      // js/own-plan.js, loaded together with ownHook (never for anyone who has no Own model loaded)
+let trustLib = null;    // js/own-trust.js (the opt-in trust test), loaded the same way
 // A computer with a mouse (vs a touchscreen): changes a hint's wording.
 const MOUSE = matchMedia('(hover: hover) and (pointer: fine)');
 // Per-card time counted toward "time spent", so leaving the phone on one card doesn't inflate it.
@@ -159,6 +160,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   session.ownWait = import('./own-gate.js').then(g => { g.resetOwnGate(); return g.ownModule(); }).then(async m => {
     if (!m || !(await m.begin({ session: true }))) { session.ownOn = false; return null; }
     ownLib = await import('./own-plan.js'); useOwnPlan(ownLib);
+    trustLib = await import('./own-trust.js');
     session.ownOn = true;
     if (R === session) {                             // (not when another session started meanwhile)
       ownHook = m;
@@ -180,7 +182,9 @@ const schedFor = (card, now = Date.now()) => {
 // The frozen plan for this card, ready for rate(), or null. Whether to plan was decided in preparePlan (Own was the scheduler when the card
 // came up), and a plan that was frozen is used for that card whatever happens meanwhile, so the label and the saved gap agree. It keeps the
 // moment it was made (`at`): a plan more than an hour old is refused by planFits, and FSRS schedules the card.
-const planFor = card => (R.ownPlan && R.ownPlan.cardId === card.id ? { ownPlan: R.ownPlan } : null);
+const planFor = card => (R.ownPlan && R.ownPlan.cardId === card.id ? { ownPlan: R.ownPlan, ...(R.ownPlan.trust ? { ownTrust: true } : {}) } : null);
+// The trust test (opt-in, js/own-trust.js): the arm this card is in right now ('trust' | 'fsrs'), or null when the test is off or the card's deck is not FSRS-6 at 90%.
+const trustArmOf = card => (ownHook?.trustConfig && trustLib ? trustLib.trustArmFor(ownHook.trustConfig(), R.settings, deckOf(card), card.id) : null);
 // Waiting for the plan to be frozen: no rating buttons are drawn meanwhile (their labels would not be the gaps that get saved).
 const planPending = () => !!R.ownPrep && !R.ownDone;
 
@@ -191,9 +195,13 @@ const planPending = () => !!R.ownPrep && !R.ownDone;
 function preparePlan() {
   R.ownPrep = R.ownSettle = null; R.ownPlan = null; R.ownDone = false;
   const card = R.current?.card, state = card && R.statesById.get(card.id);
-  if (!ownHook?.plan || !ownHook.isPlanning() || !state || state.state !== REVIEW || !R.current) return;
+  if (!ownHook?.plan || !state || !R.current) return;
+  // In the trust test a card follows its arm: 'fsrs' cards get no plan (plain FSRS), 'trust' cards get the trust plan (also in relearning).
+  const arm = trustArmOf(card);
+  if (arm === 'fsrs') return;
+  if (arm === 'trust' ? state.state !== REVIEW && state.state !== RELEARNING : !ownHook.isPlanning() || state.state !== REVIEW) return;
   const now = Date.now();
-  R.ownPrep = ownHook.plan({ card, state, now, opts: schedFor(card, now), decks: R.decks });
+  R.ownPrep = ownHook.plan({ card, state, now, opts: schedFor(card, now), decks: R.decks, trust: arm === 'trust' });
 }
 // -> a promise that is done once the plan is frozen (or known to be missing). Safe to call again; the plan never changes after the first call.
 function settlePlan() {
@@ -706,6 +714,8 @@ async function answer(el, rating) {
     rating,
     state: prev ? prev.state : NEW          // the card's state before this review (useful for stats and FSRS tuning later)
   };
+  const arm = trustArmOf(item.card);          // the trust test's arm and the card's due time are kept for its results table
+  if (arm) { log.arm = arm; if (prev && Number.isFinite(prev.due)) log.due = prev.due; }
   try {
     const inStep = R.version === db.scheduleVersion();       // (a change that landed earlier, e.g. new weights from sync, must not be absorbed below)
     const saving = db.saveReview(next, log);

@@ -125,14 +125,20 @@ export class Engine {
   // review), so that faded prediction (not the curve right after the answer) is what meets R. -> { 2, 3, 4 } at least 1, never decreasing,
   // or null when a head is not made of real numbers, or when maxDays is under 1 or target is not between 0 and 1 (the caller then leaves
   // the card to FSRS). Changes nothing.
-  daysForButtons(row, ms, target, maxDays) {
+  // opts.sched: 'fade' (default, as above) or 'v2' (the "trust rule" read: the head reads the features as the NEXT review will see them, with zeros for
+  // the numbers a plan cannot know, the card's answer and lapse counts including the planned answer, and the deck and you memories fading over the gap
+  // too; see fadedP in own-model.js).
+  daysForButtons(row, ms, target, maxDays, opts = {}) {
     if (!(maxDays >= 1 && target > 0 && target < 1)) return null;
+    const sched = opts.sched || 'fade';
+    if (sched !== 'fade' && sched !== 'v2') throw new Error("sched must be 'fade' or 'v2'");
     const b = this.builder, m = this.model;
     const dec = m.decayAll(this._states(row), b.gaps(row)), fq = b.features(row, true), out = {};
     for (const rating of [2, 3, 4]) {
       const next = m.advance(b.features({ ...row, rating, ms }, false), dec);
       if (!headFinite(m.headOf(next, fq))) return null;
-      const d = m.fadedDays(next, fq, target, maxDays);
+      const fresh = sched === 'v2' ? { noteGap0: 0, ...b.afterCounters(row, rating), neutral: [0, 0, 0, 0, 0], decayAll: true } : null;
+      const d = m.fadedDays(next, fq, target, maxDays, fresh);
       if (d === null) return null;
       out[rating] = Math.max(1, Math.min(maxDays, d));
     }

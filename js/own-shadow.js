@@ -2,14 +2,15 @@
 // switch is on (js/own-gate.js), or by the Settings screen. It starts the worker (or, where there are no workers, runs the same engine
 // room on the page), turns answers into messages, and keeps the few facts Review needs (is Own scheduling right now?). No network.
 //
-// What Review, Practice and Play use:   begin()  afterAnswer()  afterUndo()  plan()  settled()  isPlanning()  markStale()  PLAN_MS
-// What the Settings screen uses:        ownStatus()  ownSetOn(on)  ownCheckNow()  ownRebuild(onProgress)  ownDismissNotice()
+// What Review, Practice and Play use:   begin()  afterAnswer()  afterUndo()  plan()  settled()  isPlanning()  trustConfig()  markStale()  PLAN_MS
+// What the Settings screen uses:        ownStatus()  ownSetOn(on)  ownSetTrust(on)  ownTrustResults()  ownCheckNow()  ownRebuild(onProgress)  ownDismissNotice()
 //                                       ownModelChanged()  ownRemoveAll()      (loading a file is loadModelFile in own-load.js)
 import { OwnCore } from './own-core.js';
 import { modelRows, studyDay } from './own-rows.js';
 import { removeModel } from './own-load.js';
 import { resetOwnGate, ownPing, onOwnPing } from './own-gate.js';
 import { PLAN_MS } from './own-plan.js';
+import { trustResults } from './own-trust.js';
 
 export { PLAN_MS };
 const TIMEOUT = { open: 20000, rebuild: 0, answer: 5000, undo: 5000, plan: 2000, check: 30000, status: 10000, setOn: 10000, flush: 10000, small: 5000 };
@@ -79,7 +80,8 @@ const mainSource = {
     const [logs, cards, decks] = await Promise.all([d.getAllInPieces('reviewLog'), d.getAll('cards'), d.getAll('decks')]);
     return { logs, cards, decks };
   },
-  async cardLogs(id) { return (await import('./db.js')).getCardLogs(id); }
+  async cardLogs(id) { return (await import('./db.js')).getCardLogs(id); },
+  async logsSince(t) { return (await import('./db.js')).getLogsSince(t); }
 };
 
 export class OwnClient {
@@ -89,6 +91,7 @@ export class OwnClient {
     this.t = null; this.local = null;
     this.failed = false; this.ready = false; this.starting = false;
     this.scheduler = 'fsrs'; this.noticePending = null;
+    this.trust = { on: false, since: null };                    // the trust test (js/own-trust.js), as last heard from the engine room
     this.rebuilding = false; this.rebuildPending = false; this.rebuildAgain = false;
     this.beginP = null; this.beginDay = null;
     this._chain = Promise.resolve();
@@ -125,6 +128,8 @@ export class OwnClient {
 
   // ---- starting a session ----
   isPlanning() { return this.scheduler === 'own'; }
+  // The trust test's switch as last heard: { on, since }. Review asks it for every card (only when Own is on and ready).
+  trustConfig() { return this.trust; }
 
   // Called when a review or practice session starts (and before any answer is handed over). Resolves true when Own is switched on and
   // ready to follow answers. Safe to call again: the memory is only loaded once, and the daily check runs once per study day.
@@ -172,6 +177,7 @@ export class OwnClient {
     if (!c) return;
     if (c.scheduler) this.scheduler = c.scheduler;
     if ('noticePending' in c) this.noticePending = c.noticePending;
+    if ('trustTest' in c) this.trust = { on: c.trustTest === true, since: c.trustSince ?? null };
     if (c.switched) ownPing('switch');                       // Own took over or went back to FSRS: other tabs follow at once
   }
   // Another tab changed Own (see own-gate.js): the model or its data changed (load, remove) -> start again; the switch or the scheduler
@@ -242,18 +248,19 @@ export class OwnClient {
   // The days until the card should come back after Hard, Good and Easy, worked out before the card is turned over (review.js freezes it).
   // -> { cardId, lastReview, at, days: { 2, 3, 4 }, modelSha }, or { skip: true } (the memory is starting up or being rebuilt: not counted
   // as a failed plan), or null (a failed plan: FSRS schedules the card). Never throws. Give the result to settled().
-  async plan({ card, state, now = Date.now(), opts, decks = [] }) {
+  // trust: true asks for the trust test's plan (a card in review or in relearning; the engine reads it the "v2" way).
+  async plan({ card, state, now = Date.now(), opts, decks = [], trust = false }) {
     try {
       if (this.failed) return null;
       if (this.starting || this.rebuilding || this.rebuildPending) return { skip: true };
-      if (!this.ready || !state || state.state !== 2 || !(opts && opts.maxInterval > 0) || !(opts.retention > 0)) return null;
+      if (!this.ready || !state || !(state.state === 2 || (trust && state.state === 3)) || !(opts && opts.maxInterval > 0) || !(opts.retention > 0)) return null;
       await this._chain;                                         // the last answer and undo must have reached the engine first
       const ms = recentMs(await this.source.cardLogs(card.id));
-      const r = await this.call('plan', { card: slimCard(card), decks: slimDecks(decks), now, ms, target: opts.retention, maxDays: opts.maxInterval }, TIMEOUT.plan);
+      const r = await this.call('plan', { card: slimCard(card), decks: slimDecks(decks), now, ms, target: opts.retention, maxDays: opts.maxInterval, trust }, TIMEOUT.plan);
       if (r && r.fail === 'unknown-card') { this.markStale(); return { skip: true }; }      // the memory is missing a card: not a failed plan, rebuild it
       if (r && (r.skip === 'off' || r.skip === 'gone' || r.skip === 'changed')) { this.scheduler = 'fsrs'; this.ready = false; return { skip: true }; }
-      if (r && r.days && r.scheduler && r.scheduler !== 'own') { this.scheduler = r.scheduler; return { skip: true }; }   // another tab switched back to FSRS
-      if (r && r.days) return { cardId: card.id, lastReview: state.lastReview ?? null, at: now, days: r.days, modelSha: r.modelSha };
+      if (r && r.days && !trust && r.scheduler && r.scheduler !== 'own') { this.scheduler = r.scheduler; return { skip: true }; }   // another tab switched back to FSRS
+      if (r && r.days) return { cardId: card.id, lastReview: state.lastReview ?? null, at: now, days: r.days, modelSha: r.modelSha, ...(trust ? { trust: true } : {}) };
       if (r && r.skip) return { skip: true };
       return null;
     } catch (err) { console.warn('Own model:', (err && err.message) || err); return null; }
@@ -261,6 +268,7 @@ export class OwnClient {
   // What came of a plan the page asked for. Counts it (a failed plan counts against the 5% rule) and returns the plan to use, or null for FSRS.
   settled(plan) {
     if (plan && plan.skip) return null;
+    if (plan && plan.trust) return plan;                           // (a trust test plan is not part of Own's own checks)
     const ok = !!plan;
     this._counter().call('notePlan', { ok }, TIMEOUT.small).then(r => this._learn(r)).catch(() => {});
     return ok ? plan : null;
@@ -277,11 +285,24 @@ export class OwnClient {
     this._learn(r);
     if (r && r.ok) {
       this.scheduler = 'fsrs'; this.ready = false; this.beginP = null;
+      if (!on) this.trust = { on: false, since: this.trust.since };
       resetOwnGate();
       ownPing(on ? 'on' : 'off');
       if (on) this.begin();                                      // builds the memory in the background
     }
     return r;
+  }
+  // The trust test's switch (see own-trust.js). -> { ok, trustTest, trustSince, trustUntil } or { ok: false, message }
+  async setTrust(on) {
+    const r = await this._counter().call('setTrust', { on: !!on }, TIMEOUT.setOn);
+    if (r && r.ok) { this.trust = { on: r.trustTest === true, since: r.trustSince ?? null }; ownPing('trust'); }
+    return r;
+  }
+  // The results table: the review log rows saved since the test started, counted (own-trust.js). Reads only.
+  async trustResults(cfg, now = Date.now()) {
+    if (!cfg || !Number.isFinite(cfg.since)) return trustResults([], cfg, now);
+    const logs = await (this.source.logsSince ? this.source.logsSince(cfg.since) : []);
+    return trustResults(logs, cfg, now);
   }
   async checkNow() {
     await this.begin();
@@ -291,14 +312,14 @@ export class OwnClient {
   // A model file was loaded or replaced: forget everything held in memory (the memory is rebuilt for the new model).
   modelChanged(tell = true) {
     if (this.t) { try { this.t.stop(); } catch { /* gone */ } this.t = null; }
-    this.local = null; this.failed = false; this.ready = false; this.beginP = null; this.scheduler = 'fsrs'; this.noticePending = null;
+    this.local = null; this.failed = false; this.ready = false; this.beginP = null; this.scheduler = 'fsrs'; this.noticePending = null; this.trust = { on: false, since: null };
     resetOwnGate();
     if (tell) ownPing('load');
   }
   // Deletes the model and everything Own saved. Cards, reviews and due dates are not touched.
   async removeAll() {
     if (this.t) { try { this.t.stop(); } catch { /* gone */ } this.t = null; }
-    this.local = null; this.failed = false; this.ready = false; this.beginP = null; this.scheduler = 'fsrs'; this.noticePending = null;
+    this.local = null; this.failed = false; this.ready = false; this.beginP = null; this.scheduler = 'fsrs'; this.noticePending = null; this.trust = { on: false, since: null };
     resetOwnGate();
     const r = await removeModel({ idb: this.idb });
     if (r && r.ok) ownPing('remove');
@@ -317,6 +338,9 @@ export const isPlanning = () => getOwn().isPlanning();
 export const markStale = () => getOwn().markStale();
 export const ownStatus = () => getOwn().status();
 export const ownSetOn = on => getOwn().setOn(on);
+export const ownSetTrust = on => getOwn().setTrust(on);
+export const ownTrustResults = (cfg, now) => getOwn().trustResults(cfg, now);
+export const trustConfig = () => getOwn().trustConfig();
 export const ownCheckNow = () => getOwn().checkNow();
 export const ownRebuild = onProgress => getOwn().rebuild(onProgress);
 export const ownDismissNotice = () => getOwn().dismissNotice();
