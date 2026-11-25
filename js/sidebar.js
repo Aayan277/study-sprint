@@ -109,7 +109,7 @@ async function paint(loaded) {
     const soon = show && badgeClass(info).includes('soon');
     const label = (cc.total ? [`Study ${d.name}`, `${plural(cc.total, 'card')}: ${due} due, ${cc.fresh} new`, info ? countdown(info).toLowerCase() : ''] : [d.name, plural(due, 'card') + ' due', info ? countdown(info).toLowerCase() : '']).filter(Boolean).join(', ');
     const tip = [d.name, `${due.toLocaleString('en')} due`, info ? short(info.daysLeft) : ''].filter(Boolean).join(' · ');
-    return `<a class="side-deck" data-key="${esc(d.id)}" href="#/deck/${esc(d.id)}"${cc.total ? ' data-study aria-keyshortcuts="Shift+Enter"' : ''} style="--deck:${esc(d.color)}" aria-label="${esc(label)}" data-tip="${esc(tip)}"${show ? ` data-exam="${soon ? 'soon' : 'on'}"` : ''}>
+    return `<a class="side-deck" data-key="${esc(d.id)}" href="#/deck/${esc(d.id)}"${cc.total ? ' data-study' : ''} style="--deck:${esc(d.color)}" aria-label="${esc(label)}" data-tip="${esc(tip)}"${show ? ` data-exam="${soon ? 'soon' : 'on'}"` : ''}>
       <span class="side-name">${esc(d.name)}</span>
       ${show ? `<span class="side-exam${soon ? ' soon' : ''}" aria-hidden="true">${short(info.daysLeft)}</span>` : ''}
       <span class="side-due${due ? '' : ' zero'}" aria-hidden="true"${cc.total ? ' title="Open deck page"' : ''}>${due}</span></a>`;
