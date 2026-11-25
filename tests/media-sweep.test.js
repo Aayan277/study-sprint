@@ -176,3 +176,23 @@ test('listMedia gives up (throws) when the server ignores offset, and deleteMedi
     assert.equal(sizes.length, 3);
   } finally { globalThis.fetch = real; }
 });
+
+// ---------- Recently deleted (js/trash.js): the files of trashed cards count as "in use" for 30 days ----------
+test('files used by cards in Recently deleted un-mark and re-upload, as if a card still used them', () => {
+  const cardsUse = new Set(['live']);
+  const inTrash = new Set(['trashed', 'trashedGone']);
+  const used = new Set([...cardsUse, ...inTrash]);                          // what sweepMedia in js/sync.js builds
+  const p = planSweep({
+    marks: { trashed: NOW - 40 * DAY, other: NOW - 40 * DAY },              // another device marked both 40 days ago
+    gone: ['trashedGone', 'neverTrashed'], used, held: new Set(['trashedGone', 'neverTrashed']), now: NOW
+  });
+  assert.deepEqual(p.unmark, ['trashed']);                                  // marked by another device: un-marked, not swept
+  assert.deepEqual(p.sweep, ['other']);                                     // a file nothing uses is swept as before
+  assert.deepEqual(p.reupload, ['trashedGone']);                            // the account lost it, this device holds it: send it again
+  // and a file the trash holds is never newly marked when this device drops it
+  assert.deepEqual(planSweep({ removed: ['trashed', 'free'], used, now: NOW }).mark, ['free']);
+});
+test('after the 30 days the trash no longer protects a file, so it is marked and swept as usual', () => {
+  const p = planSweep({ removed: ['trashed'], used: new Set(['live']), now: NOW });
+  assert.deepEqual(p.mark, ['trashed']);
+});

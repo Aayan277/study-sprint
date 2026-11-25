@@ -355,13 +355,15 @@ async function tidyMedia(now = Date.now()) {
   if (Number.isFinite(settings.mediaCleanedAt) && now - settings.mediaCleanedAt < MEDIA_TIDY_EVERY && now >= settings.mediaCleanedAt) return false;
   if (await account()) return false;
   if (!(await db.count('media'))) return false;       // (not noted: the first picture added is looked at on the next start)
-  await db.cleanMedia(now);
+  const inTrash = await (await import('./trash-db.js')).protectedMedia();      // pictures of cards in Recently deleted stay for 30 days
+  if (!inTrash) return false;
+  await db.cleanMedia(now, { keep: inTrash });
   settings.mediaCleanedAt = now;
   await db.setSetting('mediaCleanedAt', now);
   return true;
 }
 function tidyMediaWhenIdle() {
-  const run = () => tidyMedia().catch(() => {});
+  const run = () => { tidyMedia().catch(() => {}); import('./trash-db.js').then(t => t.purgeDaily()).catch(() => {}); };      // (and Recently deleted drops what is over 30 days old)
   if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 15000 });
   else setTimeout(run, 3000);
 }

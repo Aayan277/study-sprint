@@ -38,6 +38,8 @@ import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 
 
 // ---------- settings ----------
+// Recently deleted goes when this device is wiped (loaded only then).
+const emptyRecentlyDeleted = async () => { try { await (await import('./trash.js')).emptyAll(); } catch (err) { console.error(err); } };
 // Settings redrawn in place go into the screen's .view box (its width and padding come from that box: see styles.css).
 // null when there is none: the redraw is skipped rather than drawn straight into #screen.
 // One "More settings" fold per section (same look as Advanced scheduling). Open or closed is remembered on this device.
@@ -234,6 +236,10 @@ export async function renderSettings(el) {
       <div class="set-row">
         <div><b>${persisted ? 'Storage' : 'Pictures and sounds'}</b>${persisted ? '<p>Saved permanently on this device.</p>' : ''}
           <p class="note" id="mediaLine"></p></div>
+      </div>
+      <div class="set-row" id="trashRow">
+        <div><b>Recently deleted</b> ${helpLink('recently-deleted', '?', 'About Recently deleted')}</div>
+        <button class="btn ghost small" type="button" id="trashBtn">Open</button>
       </div>`)}
       ${persisted ? '' : `<div class="set-row" id="storageWarnRow"><div><b>Storage</b><p class="note usage-line warn" id="storageWarn">${storageWarnText()}</p></div></div>`}
       <div class="set-row" id="usageRow" hidden>
@@ -361,6 +367,7 @@ export async function renderSettings(el) {
   drawSync();
   $('newBtn').addEventListener('click', async () => (await import('./whats-new.js')).openWhatsNewSheet());
   $('resetBtn').addEventListener('click', confirmReset);
+  $('trashBtn').addEventListener('click', async () => (await import('./trash-sheet.js')).openTrashSheet());
   $('exportBtn').addEventListener('click', exportBackup);
   fillMediaInfo();
   $('importIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) confirmRestore(f); });
@@ -665,6 +672,7 @@ async function confirmRestore(file) {
       // (Any other failure, such as being offline, goes on as before: the backup is applied here and sent when there's a connection.)
       if (synced && ['busy', 'skipped'].includes((await sync.syncNow()).reason)) { closeSheet(); toast('Another window is syncing. Try again in a moment. Nothing was changed.'); return; }
       await db.importAll(data, { everywhere: synced });
+      await emptyRecentlyDeleted();          // the backup replaces everything, so what was waiting in Recently deleted goes too
     } catch (e) {
       console.error(e);
       closeSheet();
@@ -734,6 +742,7 @@ function confirmResetSynced() {
       return;
     }
     await db.deleteEverything();
+    await emptyRecentlyDeleted();
     refreshBadgeNow();            // nothing is due any more: the app icon's number goes
     // Study settings back to their defaults (they sync); the theme stays.
     for (const [k, v] of Object.entries(db.DEFAULT_SETTINGS)) if (SYNCED_SETTINGS.includes(k)) await db.setSetting(k, v);
@@ -961,7 +970,7 @@ export async function drawDamaged() {
 
 // Asked by sync.signIn / createAccount before anything is merged, when this device holds cards that aren't this account's.
 // Answers 'go' or 'cancel'. "Remove them" wipes this device first (the account that owns them keeps its copy).
-function askAboutDevice(v) {
+function askAboutDevice(v, userId) {
   return new Promise(resolve => {
     let settled = false;
     const finish = answer => { if (!settled) { settled = true; resolve(answer); } };
@@ -998,7 +1007,11 @@ function askAboutDevice(v) {
     $('devCancel').addEventListener('click', () => { finish('cancel'); closeSheet(); });
     $('devRemove')?.addEventListener('click', wipeThen);
     $('devFresh')?.addEventListener('click', wipeThen);
-    $('devAdd')?.addEventListener('click', () => { finish('go'); closeSheet(); });
+    $('devAdd')?.addEventListener('click', async () => {
+      // The cards are now this account's, so what was deleted from them while signed out (Recently deleted) is too. Only here: Cancel and Start fresh never claim it.
+      try { if (userId) await (await import('./trash.js')).claim(userId); } catch (err) { console.error(err); }
+      finish('go'); closeSheet();
+    });
   });
 }
 
@@ -1268,6 +1281,7 @@ async function wipeThisDevice() {
   clearDraft();                   // pasted text on the Import screen belongs to the data that was just wiped
   const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime, whatsNewSeen } = app.settings;
   await db.resetAll();
+  await emptyRecentlyDeleted();          // Recently deleted is part of this device's data
   try { await (await import('./own-gate.js')).wipeOwn(); } catch (err) { console.warn('Own model:', (err && err.message) || err); }      // Own's separate database goes too
   clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);
