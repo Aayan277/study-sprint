@@ -53,6 +53,10 @@ test('who is in the test: FSRS-6 at 90% only (the deck can have its own retentio
   assert.equal(trustEligible({ ...s, targetRetention: 0.85 }, null), false);
   assert.equal(trustEligible(s, { options: { targetRetention: 0.8 } }), false);
   assert.equal(trustEligible({ ...s, targetRetention: 0.8 }, { options: { targetRetention: 0.9 } }), true);
+  const soon = new Date(Date.now() + 5 * 86400000), iso = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
+  assert.equal(trustEligible(s, { examDate: iso }), false, 'a deck with an exam coming up is left out');
+  assert.equal(trustEligible(s, { examDate: '2001-01-01' }), true, 'a past exam does not matter');
+  assert.equal(trustArmFor({ on: true }, s, { examDate: iso }, 'x'), null);
   assert.equal(trustArmFor({ on: false }, s, null, 'x'), null);
   assert.equal(trustArmFor(null, s, null, 'x'), null);
   assert.equal(trustArmFor({ on: true }, { ...s, fsrsVersion: 7 }, null, 'x'), null);
@@ -205,7 +209,7 @@ test('own-core: setTrust needs Own switched on, keeps the start time, stops with
 test('own-core: a trust plan needs the test switched on; it uses the v2 read, the normal plan does not', async () => {
   const core = await fresh(true);
   const args = { card: CARDS[0], decks: DECKS, now: T0 + 14 * D1, ms: 5000, target: 0.9, maxDays: 36500 };
-  assert.deepEqual(await core.handle('plan', { ...args, trust: true }), { skip: 'off' });
+  assert.deepEqual(await core.handle('plan', { ...args, trust: true }), { skip: 'trust-off' });
   await core.handle('setTrust', { on: true });
   const t = await core.handle('plan', { ...args, trust: true }), n = await core.handle('plan', args);
   assert.ok(t.days && t.trust === true);

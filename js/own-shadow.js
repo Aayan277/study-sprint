@@ -258,6 +258,7 @@ export class OwnClient {
       const ms = recentMs(await this.source.cardLogs(card.id));
       const r = await this.call('plan', { card: slimCard(card), decks: slimDecks(decks), now, ms, target: opts.retention, maxDays: opts.maxInterval, trust }, TIMEOUT.plan);
       if (r && r.fail === 'unknown-card') { this.markStale(); return { skip: true }; }      // the memory is missing a card: not a failed plan, rebuild it
+      if (r && r.skip === 'trust-off') { this.trust = { on: false, since: this.trust.since }; return { skip: true }; }
       if (r && (r.skip === 'off' || r.skip === 'gone' || r.skip === 'changed')) { this.scheduler = 'fsrs'; this.ready = false; return { skip: true }; }
       if (r && r.days && !trust && r.scheduler && r.scheduler !== 'own') { this.scheduler = r.scheduler; return { skip: true }; }   // another tab switched back to FSRS
       if (r && r.days) return { cardId: card.id, lastReview: state.lastReview ?? null, at: now, days: r.days, modelSha: r.modelSha, ...(trust ? { trust: true } : {}) };
@@ -266,9 +267,10 @@ export class OwnClient {
     } catch (err) { console.warn('Own model:', (err && err.message) || err); return null; }
   }
   // What came of a plan the page asked for. Counts it (a failed plan counts against the 5% rule) and returns the plan to use, or null for FSRS.
-  settled(plan) {
+  // opts.trust: the plan was asked for by the trust test: its outcome (also a missing plan) never counts toward Own's own checks.
+  settled(plan, { trust = false } = {}) {
     if (plan && plan.skip) return null;
-    if (plan && plan.trust) return plan;                           // (a trust test plan is not part of Own's own checks)
+    if (trust || (plan && plan.trust)) return plan && plan.days ? plan : null;
     const ok = !!plan;
     this._counter().call('notePlan', { ok }, TIMEOUT.small).then(r => this._learn(r)).catch(() => {});
     return ok ? plan : null;
@@ -333,7 +335,7 @@ export const begin = opts => getOwn().begin(opts);
 export const afterAnswer = a => getOwn().afterAnswer(a);
 export const afterUndo = logId => getOwn().afterUndo(logId);
 export const plan = a => getOwn().plan(a);
-export const settled = p => getOwn().settled(p);
+export const settled = (p, o) => getOwn().settled(p, o);
 export const isPlanning = () => getOwn().isPlanning();
 export const markStale = () => getOwn().markStale();
 export const ownStatus = () => getOwn().status();

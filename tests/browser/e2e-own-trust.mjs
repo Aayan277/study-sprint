@@ -75,15 +75,19 @@ await openOwn();
 ok(!(await page.locator('#ownTrust').isChecked()) && await page.locator('#ownTrustTable').count() === 1, 'off and the table are remembered after a reload');
 await page.check('#ownTrust');
 await page.waitForFunction(() => document.querySelector('#ownTrust').checked && !document.querySelector('#ownTrust').disabled);
-
-// not FSRS-6 at 90%: off limits, with the warning
+// the settings stop qualifying while the test is on: the switch stays usable to turn it off, and one warning says why
 await setSetting('targetRetention', 0.85);
 await openOwn();
-ok(await page.locator('#ownTrust').isDisabled(), 'at 85% the switch is off limits');
+ok(await page.locator('#ownTrust').isEnabled() && await page.locator('#ownTrust').isChecked(), 'at 85% with the test on, the switch can still be turned off');
 ok(/Needs FSRS-6 at 90% desired retention\./.test(await page.textContent('#ownTrustWarn')), 'one warning says why: ' + await page.textContent('#ownTrustWarn'));
+await page.uncheck('#ownTrust');
+await page.waitForFunction(() => !document.querySelector('#ownTrust').checked);
+await openOwn();
+ok(await page.locator('#ownTrust').isDisabled() && await page.locator('#ownTrustWarn').count() === 0, 'off at 85%: the switch is off limits and there is no red line');
 await setSetting('targetRetention', 0.9); await setSetting('fsrsVersion', 7);
 await openOwn();
-ok(await page.locator('#ownTrust').isDisabled() && await page.locator('#ownTrustWarn').count() === 1, 'with FSRS-7 it is off limits too');
+ok(await page.locator('#ownTrust').isDisabled() && await page.locator('#ownTrustWarn').count() === 0, 'with FSRS-7 it is off limits too');
+await setSetting('fsrsVersion', 6);
 await setSetting('fsrsVersion', 6);
 
 // the help answer

@@ -193,7 +193,7 @@ const planPending = () => !!R.ownPrep && !R.ownDone;
 // most PLAN_MS (300 ms) and then frozen: the buttons and the saved due date both come from it, so they agree. No plan (late, no memory of the
 // card, out of date, the worker stopped...) means FSRS schedules the card, silently; Own counts it as a failed plan.
 function preparePlan() {
-  R.ownPrep = R.ownSettle = null; R.ownPlan = null; R.ownDone = false;
+  R.ownPrep = R.ownSettle = null; R.ownPlan = null; R.ownDone = false; R.ownTrustReq = false;
   const card = R.current?.card, state = card && R.statesById.get(card.id);
   if (!ownHook?.plan || !state || !R.current) return;
   // In the trust test a card follows its arm: 'fsrs' cards get no plan (plain FSRS), 'trust' cards get the trust plan (also in relearning).
@@ -201,14 +201,15 @@ function preparePlan() {
   if (arm === 'fsrs') return;
   if (arm === 'trust' ? state.state !== REVIEW && state.state !== RELEARNING : !ownHook.isPlanning() || state.state !== REVIEW) return;
   const now = Date.now();
+  R.ownTrustReq = arm === 'trust';
   R.ownPrep = ownHook.plan({ card, state, now, opts: schedFor(card, now), decks: R.decks, trust: arm === 'trust' });
 }
 // -> a promise that is done once the plan is frozen (or known to be missing). Safe to call again; the plan never changes after the first call.
 function settlePlan() {
   if (!R.ownPrep) return null;
   if (!R.ownSettle) {
-    const prep = R.ownPrep, id = R.current.card.id;
-    R.ownSettle = ownLib.freezePlan(prep, plan => ownHook.settled(plan)).then(plan => {        // (a missing plan is counted by settled)
+    const prep = R.ownPrep, id = R.current.card.id, trustReq = R.ownTrustReq === true;
+    R.ownSettle = ownLib.freezePlan(prep, plan => ownHook.settled(plan, { trust: trustReq })).then(plan => {        // (a missing plan is counted by settled)
       if (R?.current?.card.id !== id || R.ownPrep !== prep) return;
       R.ownPlan = plan; R.ownDone = true;
       // the buttons wait for this: draw them now, whichever screen code asked for them

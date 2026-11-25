@@ -298,7 +298,8 @@ export class OwnCore {
     try {
       const seen = await this._sync();                                  // another tab may have switched Own off or removed the model
       if (seen !== 'ok') return { skip: seen };
-      if (!this.settings.on || (trust && !this.settings.trustTest)) return { skip: 'off' };
+      if (!this.settings.on) return { skip: 'off' };
+      if (trust && !this.settings.trustTest) return { skip: 'trust-off' };       // (only the test is off: Own itself carries on)
       const rows = modelRows([{ id: -1, cardId: card.id, timestamp: now, source: 'review', rating: 3, ms }], [card], decks);
       if (!rows.length || !this.engine.hasCard(rows[0].cardKey)) return { fail: 'unknown-card' };
       const days = this.engine.daysForButtons(rows[0], ms, target, Math.min(maxDays, OWN_MAX_DAYS), trust ? { sched: 'v2' } : undefined);

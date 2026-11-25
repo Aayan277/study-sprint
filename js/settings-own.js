@@ -88,8 +88,8 @@ export async function wireOwn(root) {
   const armRow = (name, a) => `<tr><th scope="row">${name}</th><td>${num(a.cards)}</td><td>${num(a.reviews)}</td><td>${pct(a.passRate)}</td><td>${rate1(a.perCardWeek)}</td></tr>`;
   const trustHTML = () => `
       <label class="adv-row switch-row"><span><b id="ownTrustLbl">Trust test</b> ${helpLink('own-trust-test', '?', 'About the trust test')}</span>
-        <input id="ownTrust" type="checkbox" class="switch" aria-labelledby="ownTrustLbl" ${st.trustTest ? 'checked' : ''} ${st.on && trustOk && !busy ? '' : 'disabled'}></label>
-      ${trustOk ? '' : '<p class="err own-lock" id="ownTrustWarn">Needs FSRS-6 at 90% desired retention.</p>'}
+        <input id="ownTrust" type="checkbox" class="switch" aria-labelledby="ownTrustLbl" ${st.trustTest ? 'checked' : ''} ${(st.trustTest || (st.on && trustOk)) && !busy ? '' : 'disabled'}></label>
+      ${st.trustTest && !trustOk ? '<p class="err own-lock" id="ownTrustWarn">Needs FSRS-6 at 90% desired retention.</p>' : ''}
       ${st.trustTest || st.trustSince != null ? `
       <div class="adv-row"><b>Trust test results</b>
         <div class="rc-table-wrap"><table class="rc-table" id="ownTrustTable"><caption class="sr-only">Trust test results by group</caption>

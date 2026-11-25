@@ -4,6 +4,7 @@
 import { fnv1a } from './own-rows.js';
 import { dayStart } from './days.js';
 import { cleanFsrsVersion } from './sched-settings.js';
+import { examInfo } from './exam.js';
 
 export const TRUST_RETENTION = 0.9;
 export const TRUST_SALT = 'own-trust|';
@@ -12,10 +13,11 @@ const DAY_MS = 86400000;
 // The arm of a card: 'trust' (the trust rule) when its stable hash is even, else 'fsrs' (plain FSRS-6). Same card, same arm, on every device.
 export const trustArm = cardId => (fnv1a(TRUST_SALT + cardId) % 2 === 0 ? 'trust' : 'fsrs');
 
-// Is FSRS-6 the scheduler, and is the desired retention 90%? settings: the saved settings; deck: the card's deck with what it inherits
+// Is FSRS-6 the scheduler, the desired retention 90%, and no exam coming up for the deck? settings: the saved settings; deck: the card's deck with what it inherits
 // (or null for the overall settings). Only such cards can be in the test.
-export function trustEligible(settings, deck) {
+export function trustEligible(settings, deck, now = Date.now()) {
   if (cleanFsrsVersion(settings?.fsrsVersion) !== 6) return false;
+  if (examInfo(deck, now)) return false;                 // a deck with an exam coming up raises retention and limits due dates: left out, so results are not mixed
   const r = (deck?.options ? { ...settings, ...deck.options } : settings || {}).targetRetention ?? 0.9;
   return Number.isFinite(r) && Math.abs(r - TRUST_RETENTION) < 1e-9;
 }
