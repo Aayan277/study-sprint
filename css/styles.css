@@ -1403,7 +1403,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .stepper input{width:64px;text-align:center;font:600 var(--fs-md) var(--f-num);padding:9px 4px}
 .num-box{width:110px;font:600 var(--fs-md) var(--f-num);padding:9px 10px}
 .num-box::placeholder{font-family:var(--f-ui);font-weight:400}
-.easy-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:var(--s-2)}
+.easy-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:var(--s-2)}
 .easy-day{display:grid;gap:4px;font-size:var(--fs-sm);color:var(--text-2)}
 .easy-day select{font-size:var(--fs-base);padding:7px 28px 7px 8px;background-position:right 8px center;background-size:14px}
 .advanced{border-top:1px solid var(--line);padding-top:10px;margin-top:4px}

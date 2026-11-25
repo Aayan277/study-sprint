@@ -753,7 +753,7 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column){display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;row-gap:10px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column) > :first-child{justify-self:stretch}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row input[type="range"]{max-width:480px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .easy-days{grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .easy-days{grid-template-columns:repeat(auto-fill,minmax(128px,1fr))}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .easy-day{min-width:0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .easy-day select{width:100%;min-width:0}
   /* in-page confirms (Reset to default, Delete…): buttons their own size at the right, not two 360px slabs */

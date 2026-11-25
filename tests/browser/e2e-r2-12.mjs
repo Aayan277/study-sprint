@@ -30,6 +30,13 @@ for (const ui of ['original', 'clinical']) for (const mode of ['light', 'dark'])
     const r = await p.$$eval(sel, es => es.map(e => { const c = getComputedStyle(e); return { app: c.appearance, img: c.backgroundImage.startsWith('url('), pr: parseFloat(c.paddingRight), bs: parseFloat(c.backgroundSize), pos: c.backgroundPositionX }; }));
     ok(r.length > 0 && r.every(x => x.app === 'none' && x.img && x.pr >= x.bs + 12), `${tag}: ${what} selects have the chevron and room for it (${JSON.stringify(r[0])})`);
   }
+  // no option text is cut off in the Easy-days selects (the longest option's text must fit between the paddings)
+  const cut = await p.$$eval('.easy-day select', es => es.map(e => {
+    const c = getComputedStyle(e), g = document.createElement('canvas').getContext('2d'); g.font = `${c.fontWeight} ${c.fontSize} ${c.fontFamily}`;
+    const need = Math.max(...[...e.options].map(o => g.measureText(o.text).width));
+    return { need: Math.ceil(need), room: Math.floor(e.clientWidth - parseFloat(c.paddingLeft) - parseFloat(c.paddingRight)) };
+  }));
+  ok(cut.length > 0 && cut.every(x => x.need <= x.room), `${tag}: Easy-days options are not truncated (${JSON.stringify(cut[0])})`);
   await p.screenshot({ path: process.argv[2] + `/select-${ui}-${mode}.png` });
   await p.close();
 }
