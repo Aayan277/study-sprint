@@ -1670,6 +1670,7 @@ img[data-media][hidden]{display:none}
   main:is([data-route="settings"],[data-route="import"]) > .view{max-width:760px}
   :root:not([data-ui="clinical"]) main[data-route="help"] > .view{max-width:760px}
   main[data-route="review"] > .view{max-width:780px}
+  body.focus main[data-route="play"] > .view{max-width:760px}      /* the setup page is full width; a running round stays a reading column */
   main[data-route="browse"] > .view{max-width:900px}
   body.has-side main{margin-right:var(--panel)}
   .toast,body.welcome:not(.focus) .toast{left:calc(50% + var(--side) / 2)}

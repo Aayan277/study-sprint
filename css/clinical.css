@@ -718,6 +718,7 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="browse"] > .view{max-width:900px;margin-inline:auto}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="import"],[data-route="settings"]) > .view{max-width:760px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="play"] .start-row .btn{flex:1 1 100%}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] body.focus main[data-route="play"] > .view{max-width:760px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="review"] > .view{max-width:780px}
   /* first run: its own wide two-part page, centred like Original */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] body.welcome main > .view{max-width:1160px}

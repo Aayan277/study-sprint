@@ -23,6 +23,11 @@ for (const ui of ['original', 'clinical']) {
     const near = (a, b) => Math.abs(a - b) <= 2;
     ok(r.view.w > 650 && near(r.deck.w, r.view.w) && near(r.start.w, r.view.w) && r.n === 3 && near(r.modesL, r.view.l) && near(r.modesR, r.view.r) && !r.sideways, `${ui} ${w}: view ${Math.round(r.view.w)}px, deck field, three format tiles and Start fill it, no sideways scroll`);
   }
+  // a running round stays a 760px reading column
+  await p.setViewportSize({ width: 1440, height: 900 });
+  await p.click('#startBtn'); await p.waitForSelector('#pCard');
+  const rw = await p.$eval('main > .view', e => Math.round(e.getBoundingClientRect().width));
+  ok(rw <= 760 && rw > 500, `${ui}: a running round is at most 760px wide (${rw}px)`);
   await p.close();
 }
 ok(errors.length === 0, 'no page errors: ' + errors.join('|'));
