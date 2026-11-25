@@ -572,6 +572,7 @@ main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;g
 .br-controls{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:var(--s-2);margin-bottom:6px}
 @media (max-width:520px){.br-controls{grid-template-columns:1fr 1fr}.br-controls input{grid-column:1 / -1}}
 .br-controls input,.br-controls select{min-width:0;font-size:var(--fs-base);padding:8px 11px}
+.br-controls select{padding-right:34px}
 .br-count{margin:0 0 10px;font-size:var(--fs-xs);color:var(--text-2)}
 /* A dense grouped list: one rounded box, hairlines between the rows */
 .crows{list-style:none;margin:0;padding:0;display:grid;gap:0;background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);overflow:hidden}
@@ -1409,7 +1410,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .num-box::placeholder{font-family:var(--f-ui);font-weight:400}
 .easy-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:var(--s-2)}
 .easy-day{display:grid;gap:4px;font-size:var(--fs-sm);color:var(--text-2)}
-.easy-day select{font-size:var(--fs-base);padding:7px 8px}
+.easy-day select{font-size:var(--fs-base);padding:7px 28px 7px 8px;background-position:right 8px center;background-size:14px}
 .advanced{border-top:1px solid var(--line);padding-top:10px;margin-top:4px}
 .advanced > summary{font-weight:600;padding:8px 0;min-height:44px;flex-wrap:wrap;gap:0 var(--s-3)}
 /* One fold style (More settings, Advanced scheduling, Own model, Danger zone, Show as table; Play's Customise button matches): a full-width row in the normal text colour, with a chevron at the right edge that turns over when it is open */

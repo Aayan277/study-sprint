@@ -24,6 +24,12 @@ for (const ui of ['original', 'clinical']) for (const mode of ['light', 'dark'])
   ok(Math.abs(m.input.h - m.select.h) <= 1, `${tag}: and the same height (${m.select.h} vs ${m.input.h})`);
   const all = await p.evaluate(() => [...document.querySelectorAll('.select')].every(e => getComputedStyle(e).appearance === 'none'));
   ok(all, `${tag}: every .select on this screen is appearance none`);
+  // the Browse selects and the Settings Easy-days selects keep room for the chevron (the text must not run under it)
+  for (const [hash, sel, what] of [['#/browse', '.br-controls select', 'Browse'], ['#/settings', '.easy-day select', 'Settings Easy days']]) {
+    await p.evaluate(h => { location.hash = h; }, hash); await p.waitForSelector(sel, { state: 'attached' });
+    const r = await p.$$eval(sel, es => es.map(e => { const c = getComputedStyle(e); return { app: c.appearance, img: c.backgroundImage.startsWith('url('), pr: parseFloat(c.paddingRight), bs: parseFloat(c.backgroundSize), pos: c.backgroundPositionX }; }));
+    ok(r.length > 0 && r.every(x => x.app === 'none' && x.img && x.pr >= x.bs + 12), `${tag}: ${what} selects have the chevron and room for it (${JSON.stringify(r[0])})`);
+  }
   await p.screenshot({ path: process.argv[2] + `/select-${ui}-${mode}.png` });
   await p.close();
 }
