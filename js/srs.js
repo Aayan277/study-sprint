@@ -40,7 +40,7 @@ export const RATINGS = [
 // (evening out the reviews runs without fuzz; FSRS-7 mode also steps the FSRS-6 memory without it) and they must not push each other out.
 const cached = new Map();
 function scheduler(opts) {
-  const { maxDue, balance, fsrsVersion, w7, ownPlan, ...lib } = opts;      // maxDue, balance, the FSRS-7 settings and Own's plan are applied here, not by the library (and are never part of the cache key)
+  const { maxDue, balance, fsrsVersion, w7, ownPlan, ownTrust, ...lib } = opts;      // maxDue, balance, the FSRS-7 settings and Own's plan are applied here, not by the library (and are never part of the cache key)
   const key = JSON.stringify(lib);
   let f = cached.get(key);
   if (f) { cached.delete(key); cached.set(key, f); return f; }        // (most recently used last)
@@ -156,25 +156,40 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   // untouched. Own's gap is held between 0.25x and 4x of FSRS's gap and at most 3,650 days (own-plan.js). With fuzz on, FSRS's own fuzz
   // (the ratio of its fuzzed gap to its exact gap) is applied to Own's days too. The max interval, evening out and the exam limit still
   // apply below. Without a plan (the normal case) nothing here changes.
-  const plan = opts.ownPlan;
+  // The trust rule (opt-in experiment, opts.ownTrust): for each button Own's gap is used only after a lapse or when it is more than
+  // TRUST_RATIO times FSRS's gap; every other button keeps FSRS's own gap (with its normal fuzz). When no button uses Own's, FSRS alone schedules.
+  const plan = opts.ownPlan, trust = opts.ownTrust === true;
   let planned = false;                          // Own's plan set the gap (evening out was already done for it)
-  if (plan && ownTools && ownTools.planFits(plan, cardId, state, card.state, rating, now) && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0) {
+  let fits = !!(plan && ownTools && ownTools.planFits(plan, cardId, state, card.state, rating, now, trust) && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0);
+  const fsrsCard = (r, o) => r === rating && o === opts ? card : opts.fsrsVersion === 7
+    ? rate7(cardId, state, r, o, now, sixAfter(state, opts, now))
+    : scheduler(o).next(toLibrary(state, now), new Date(now), r).card;
+  const finalDays = {}, exactCards = {}, useOwn = {};
+  if (fits && trust) {
+    for (const r of [2, 3, 4]) {
+      exactCards[r] = fsrsCard(r, { ...opts, fuzz: false });
+      useOwn[r] = exactCards[r].state === 2 && ownTools.trustUsesOwn(state.state === 3, plan.days[r], exactCards[r].scheduled_days);
+    }
+    if (![2, 3, 4].some(r => useOwn[r])) fits = false;
+  }
+  if (fits) {
     const { clampOwnDays, orderOwnDays } = ownTools;
     // The final gap (clamped, then fuzzed or evened out) is worked out for Hard, Good and Easy the same way every time, and only then are the
     // three put in order (Hard < Good < Easy). So every rating works out the same three numbers: the buttons and the saved date agree.
     // Evening out only reads the load here (the card is added to it below, once, for the rating that was pressed).
-    const fsrsCard = (r, o) => r === rating && o === opts ? card : opts.fsrsVersion === 7
-      ? rate7(cardId, state, r, o, now, sixAfter(state, opts, now))
-      : scheduler(o).next(toLibrary(state, now), new Date(now), r).card;
-    const finalDays = {}, exactCards = {};
     // The exam limit (examClamp, which only reads the load) applied to a gap of d days, on a copy of the rating's own card.
     const examDay = (r, d) => examClamp({ ...exactCards[r], due: new Date(now + d * DAY), scheduled_days: d }, now, opts, opts.balance?.load).scheduled_days;
     let moved = false;                            // did the exam limit move any of the three?
     for (const r of [2, 3, 4]) {
-      exactCards[r] = fsrsCard(r, { ...opts, fuzz: false });
+      exactCards[r] ||= fsrsCard(r, { ...opts, fuzz: false });
       const exact = exactCards[r].scheduled_days;
-      let d = clampOwnDays(plan.days[r], exact, opts.maxInterval);
-      if (opts.fuzz && !balanced && exact > 0) d = clampOwnDays(d * (fsrsCard(r, opts).scheduled_days / exact), exact, opts.maxInterval);
+      if (trust && exactCards[r].state !== 2) { finalDays[r] = 0; continue; }     // (a relearning step that stays a step: only there so the order below can ignore it)
+      let d;
+      if (trust && !useOwn[r]) d = opts.fuzz && !balanced && exact > 0 ? fsrsCard(r, opts).scheduled_days : exact;       // FSRS's own gap
+      else {
+        d = clampOwnDays(plan.days[r], exact, opts.maxInterval);
+        if (opts.fuzz && !balanced && exact > 0) d = clampOwnDays(d * (fsrsCard(r, opts).scheduled_days / exact), exact, opts.maxInterval);
+      }
       if (balanced && d >= 3) d = pickDay(d, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, r) });
       const e = examDay(r, d);
       if (e !== d) { moved = true; d = e; }

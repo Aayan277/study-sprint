@@ -11,7 +11,7 @@ The current state and what's next. Keep this file short: history goes in [CHANGE
 - Each release adds a line to the top of CHANGELOG.md (the same words as its `js/whats-new.js` entry).
 - Day-to-day rules are in `CLAUDE.md` and the `release` skill (`.claude/skills/release`).
 
-## Where things stand (v4.72)
+## Where things stand (v4.73)
 
 - Live at https://aayan277.github.io/study-sprint/ (GitHub Pages, `main` branch root). Code is all rights reserved (`LICENSE`).
 - Flashcards with FSRS scheduling (FSRS-6 is the default and the fallback), Anki/CSV/Excel/PDF import, Play games, Practice test, exam planning, stats, optional sync (Supabase).
@@ -19,6 +19,7 @@ The current state and what's next. Keep this file short: history goes in [CHANGE
 - Recently deleted (4.72): deleted cards and decks wait 30 days in Settings → Your data → More settings (kept hidden on purpose; nothing else points to it). Per device, in its own IndexedDB database `study-sprint-trash`; only a restore syncs. Design: `docs/design/recently-deleted-plan.md`.
 - Headline "Study less. Remember more."; plain promo images made by `tests/browser/promo-images.mjs` and screenshots by `tests/browser/readme-shots.mjs`.
 - Two styles: Original (`css/styles.css`) and Clinical (`css/clinical.css`), each light and dark.
+- Own trust test (4.73, opt-in, experimental): in the Own model section, cards are split half and half between plain FSRS-6 and a rule that uses Own's gap after a lapse or when it is over 1.4 times FSRS's. A results table compares them; it needs about two months of data.
 - Own model: Settings → Study → Advanced scheduling → Own model → Load model file. It only takes over once it is better at the 99% level (`js/own-verdict.js`). Model files are never committed.
 
 ## Next

@@ -8,6 +8,9 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.73', items: [
+    'A new experiment in the Own model settings: a trust test that splits your cards between a new scheduling rule and plain FSRS-6, with a results table.',
+  ] },
   { version: '4.72', items: [
     'A new welcome screen: study less, remember more.',
   ] },

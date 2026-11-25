@@ -18,6 +18,12 @@ const clip = (x, lo, hi) => (x < lo ? lo : x > hi ? hi : x);
 const dayOf = row => (Number.isFinite(row.day) ? row.day : studyDay(row.t));
 const copy = o => (o ? { ...o } : o);
 
+// The scalings of the head-visible numbers that serving the "v2" interval (own-model.js fadedP) must repeat exactly.
+export const f3Of = noteGapDays => L(noteGapDays) / 5;      // note gap in days
+export const f6Of = answers => L(answers) / 3;
+export const f7Of = lapses => L(lapses) / 2;
+export const f8Of = ageDays => L(ageDays) / 6;              // days since the card was first seen
+
 export class OwnFeatures {
   constructor() {
     this.cards = new Map();   // cardKey -> { prevT, prevDay, firstDay, answers, lapses }
@@ -45,12 +51,12 @@ export class OwnFeatures {
     f[0] = c ? L(g.card) / 5 : 0;
     f[1] = c ? 0 : 1;
     f[2] = c && c.prevDay === day ? 1 : 0;
-    f[3] = g.note === null ? 0 : L(g.note) / 5;
+    f[3] = g.note === null ? 0 : f3Of(g.note);
     f[4] = g.deck === null ? 0 : L(g.deck) / 5;
     f[5] = g.user === null ? 0 : L(g.user) / 5;
-    f[6] = L(c ? c.answers : 0) / 3;
-    f[7] = L(c ? c.lapses : 0) / 2;
-    f[8] = c ? L(day - c.firstDay) / 6 : 0;
+    f[6] = f6Of(c ? c.answers : 0);
+    f[7] = f7Of(c ? c.lapses : 0);
+    f[8] = c ? f8Of(day - c.firstDay) : 0;
     const t = this.today.day === day ? this.today : null;
     f[9] = L(t ? t.answers : 0) / 4;
     f[10] = t && t.answers > 0 ? t.again / t.answers : 0;
@@ -61,6 +67,13 @@ export class OwnFeatures {
       f[17] = row.kind === 'replay' ? 1 : 0;
     }
     return f;
+  }
+
+  // What the card's counters will be right AFTER this row is answered with `rating` (changes nothing), for serving a "v2" interval:
+  // { age0: whole days from the card's first day to this row's day (0 for a new card), answers, lapses }.
+  afterCounters(row, rating = row.rating) {
+    const c = this.cards.get(row.cardKey), day = dayOf(row);
+    return { age0: c ? Math.max(0, day - c.firstDay) : 0, answers: (c ? c.answers : 0) + 1, lapses: (c ? c.lapses : 0) + (rating === 1 ? 1 : 0) };
   }
 
   // Record that this answer happened. Returns a token for undo().

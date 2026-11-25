@@ -124,6 +124,27 @@ test('plans: only while Own schedules; a plan is made from the saved memory and 
   assert.ok(core);
 });
 
+test('trust test plans: a missing or failed trust plan is never counted against Own; another tab turning the test off leaves Own working', async () => {
+  const idb = await loadedIdb(), { client, core } = makeClient(idb);
+  await client.setOn(true); await client.begin();
+  await poke(core, { scheduler: 'own', switches: [{ day: 1, to: 'own', why: 'better' }] }); client.scheduler = 'own';
+  assert.equal((await client.setTrust(true)).ok, true);
+  const plan = await client.plan(planArgs(client, { trust: true }));
+  assert.equal(plan.trust, true);
+  assert.equal(client.settled(plan, { trust: true }), plan);
+  for (let i = 0; i < 30; i++) assert.equal(client.settled(null, { trust: true }), null);      // late or failed trust plans
+  await client._counter().call('flush', {});
+  const s = await client.status();
+  assert.deepEqual([s.plansToday.total, s.plansToday.failed, s.fallbacks], [0, 0, 0]);
+  assert.equal(client.isPlanning(), true, 'Own is still the scheduler');
+  // the test is switched off elsewhere: no plan, not a failure, and Own keeps scheduling
+  await core.handle('setTrust', { on: false });
+  assert.deepEqual(await client.plan(planArgs(client, { trust: true })), { skip: true });
+  assert.equal(client.ready, true); assert.equal(client.isPlanning(), true);
+  assert.equal(client.trustConfig().on, false);
+  assert.ok((await client.plan(planArgs(client))).days, 'the ordinary Own plan still works');
+});
+
 test('too many failed plans in a day send Own back to FSRS through the page too', async () => {
   const idb = await loadedIdb(), { client, core } = makeClient(idb);
   await client.setOn(true); await client.begin();

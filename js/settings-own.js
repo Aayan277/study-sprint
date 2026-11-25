@@ -3,10 +3,14 @@
 // Errors, the stopped-worker warning and the data-loss confirm are the only sentences.
 import { esc, toast } from './ui.js';
 import { helpLink } from './help.js';
+import { trustAvailable } from './own-trust.js';
 
 const num = n => Number(n).toLocaleString('en');
+const pct = x => (x === null || x === undefined ? '–' : (x * 100).toFixed(1) + '%');
+const rate1 = x => (x === null || x === undefined ? '–' : x.toFixed(2));
 const signed = x => (x < 0 ? '−' : '') + Math.abs(x).toFixed(3);
 const POLL_MS = 1500;
+const EMPTY = { cards: 0, reviews: 0, passRate: null, perCardWeek: null };
 
 // The model's own safety words are plain: nothing to translate. The one place numbers are read from the verdict.
 function verdictHTML(st) {
@@ -35,11 +39,13 @@ const schedLabel = st => {
 };
 
 export async function wireOwn(root) {
+  if (!root) return;                                // (the screen was left while this code was loading)
   const own = await import('./own-shadow.js');
   const load = await import('./own-load.js');
   root.innerHTML = `<div id="ownMain"></div><p class="err" id="ownErr" role="alert" hidden></p>`;
   const $ = id => root.querySelector('#' + id);
   let st = { loaded: false }, busy = false, timer = 0, confirming = false;
+  let trustOk = false, results = null;           // can the trust test run (FSRS-6 at 90%), and its table
 
   const setError = msg => { const e = $('ownErr'); e.textContent = msg || ''; e.hidden = !msg; };
   const stopPoll = () => { clearTimeout(timer); timer = 0; };
@@ -61,9 +67,35 @@ export async function wireOwn(root) {
       st = { loaded: false };
       setError('Couldn’t read the Own model. FSRS is scheduling your reviews.');
     }
+    await readTrust();
+    if (!root.isConnected) return;                    // (the screen was left while that was read)
     draw(focusId);
     poll();
   }
+
+  // Is the trust test possible with the current scheduling settings, and what do its results say so far?
+  async function readTrust() {
+    trustOk = false; results = null;
+    if (!st.loaded) return;
+    try {
+      const db = await import('./db.js'), tree = await import('./deck-tree.js');
+      const [settings, decks] = await Promise.all([db.getSettings(), db.getDecks()]);
+      trustOk = trustAvailable(settings, decks.map(d => tree.effectiveDeck(decks, d.id)).filter(Boolean));
+      if (st.trustSince != null) results = await own.ownTrustResults({ since: st.trustSince, until: st.trustUntil });
+    } catch (err) { console.warn('Own model:', (err && err.message) || err); }
+  }
+
+  const armRow = (name, a) => `<tr><th scope="row">${name}</th><td>${num(a.cards)}</td><td>${num(a.reviews)}</td><td>${pct(a.passRate)}</td><td>${rate1(a.perCardWeek)}</td></tr>`;
+  const trustHTML = () => `
+      <label class="adv-row switch-row"><span><b id="ownTrustLbl">Trust test</b> ${helpLink('own-trust-test', '?', 'About the trust test')}</span>
+        <input id="ownTrust" type="checkbox" class="switch" aria-labelledby="ownTrustLbl" ${st.trustTest ? 'checked' : ''} ${(st.trustTest || (st.on && trustOk)) && !busy ? '' : 'disabled'}></label>
+      ${st.trustTest && !trustOk ? '<p class="err own-lock" id="ownTrustWarn">Needs FSRS-6 at 90% desired retention.</p>' : ''}
+      ${st.trustTest || st.trustSince != null ? `
+      <div class="adv-row"><b>Trust test results</b>
+        <div class="rc-table-wrap"><table class="rc-table" id="ownTrustTable"><caption class="sr-only">Trust test results by group</caption>
+          <thead><tr><th scope="col"><span class="sr-only">Group</span></th><th scope="col">Cards</th><th scope="col">Reviews</th><th scope="col">Pass rate</th><th scope="col">Reviews per card per week</th></tr></thead>
+          <tbody>${armRow('Trust rule', results ? results.trust : EMPTY)}${armRow('FSRS-6', results ? results.fsrs : EMPTY)}</tbody></table></div>
+        <div class="own-line"><b>Days running</b><span class="own-nums mono" id="ownTrustDays">${results ? results.days.toFixed(1) : '0.0'}</span></div></div>` : ''}`;
 
   function draw(focusId) {
     const keep = focusId || (root.contains(document.activeElement) ? document.activeElement.id : '');
@@ -77,6 +109,7 @@ export async function wireOwn(root) {
         </div></div>
       <label class="adv-row switch-row"><span><b>Use my own model</b></span>
         <input id="ownOn" type="checkbox" class="switch" ${st.on ? 'checked' : ''} ${L && !busy ? '' : 'disabled'}></label>
+      ${L ? trustHTML() : ''}
       ${L ? `
       <div class="adv-row"><b>Scheduling</b><span class="own-line"><span id="ownSched" role="status">${esc(schedLabel(st))}</span></span>
         ${st.autoLocked ? '<span class="err own-lock" id="ownLocked">Locked on FSRS.</span>' : ''}</div>
@@ -125,6 +158,15 @@ export async function wireOwn(root) {
       await refresh('ownOn');
     });
     if (!st.loaded) return;
+    $('ownTrust').addEventListener('change', async e => {
+      const want = e.target.checked;
+      await guard(async () => {
+        const r = await own.ownSetTrust(want);
+        if (!r || !r.ok) { setError((r && r.message) || 'Couldn’t change that. Nothing was changed.'); return; }
+        toast(want ? 'Trust test on' : 'Trust test off');
+      }, 'Couldn’t change that. Nothing was changed.');
+      await refresh('ownTrust');
+    });
     $('ownCheck').addEventListener('click', async () => {
       await guard(async () => { await own.ownCheckNow(); }, 'Couldn’t check right now. FSRS is still scheduling your reviews.');
       await refresh('ownCheck');
