@@ -3488,3 +3488,5 @@ main h2[tabindex="-1"]{outline:none}
 
 /* "Show as table" stays (it is the accessible way to read a chart) but sits quietly under it */
 .chart-table > summary{color:var(--text-2);font-size:var(--fs-xs);font-weight:500}
+.th-fresh{margin:calc(var(--s-2) * -1) 0 var(--s-4)}
+.th-fresh .link{color:var(--text-2);padding-left:0}

@@ -110,13 +110,14 @@ export async function renderToday(el) {
         </div>
         ${streakHTML(streak, { button: true })}
         ${resume
-          ? `<a class="btn primary wide big" id="startBtn" data-resume data-hint="Resume the session" data-hint-key="Enter" href="#/review${resume.deckId ? '/' + encodeURIComponent(resume.deckId) : ''}" aria-label="Resume · ${plural(resume.left, 'card')} left">${icon('play')} Resume · ${resume.left.toLocaleString('en')} left</a>` : ''}
+          ? `<a class="btn primary wide big" id="startBtn" data-resume data-hint="Resume the session" data-hint-key="Enter" href="#/review${resume.deckId ? '/' + encodeURIComponent(resume.deckId) : ''}" ${singleKeysOn() ? ' aria-keyshortcuts="Enter S"' : ''} aria-label="Resume · ${resume.left.toLocaleString('en')} left">${icon('play')} Resume · ${resume.left.toLocaleString('en')} left</a>` : ''}
         ${resume ? '' : tr.state === 'todo'
           ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" data-hint="Start studying" data-hint-key="Enter"${singleKeysOn() ? ' aria-keyshortcuts="Enter S"' : ''} aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
           : `<div class="th-done">
               <p>Nothing is due right now. ${[nextDueText(data, c.cards), data.hiddenCount ? `${data.hiddenCount.toLocaleString('en')} hidden` : ''].filter(Boolean).join(' · ')}</p>
               <button class="btn ghost th-extra" type="button" id="customLink">Extra study</button></div>`}
       </section>
+      ${resume && resume.scope !== scopeKey(chosen) ? '<p class="th-fresh"><button class="link" type="button" id="startFresh">Start today’s cards</button></p>' : ''}
       ${rescueHTML()}
       <div id="whatsNewSlot"></div>
       <div id="ownNoticeSlot"></div>
@@ -288,6 +289,7 @@ export async function renderToday(el) {
       el.querySelectorAll('[data-rdays]').forEach(x => x.setAttribute('aria-pressed', x === b));
       $('rbPre').textContent = `~${Math.ceil(rescue.offer.backlog / rescueDays)} overdue + ${rescue.offer.typical} usual a day`;
     }));
+    $('startFresh')?.addEventListener('click', () => launch({ deckIds: chosen }));      // (asks "Start over?" first, as Start does when it would replace a session)
     if (!$('startBtn')?.hasAttribute('data-resume')) $('startBtn')?.addEventListener('click', () => launch({ deckIds: chosen }));
     $('optBtn')?.addEventListener('click', () => openOptions());
     // The streak opens "Your streak": the freeze, the last 7 days and planned days off (loaded when first needed).
