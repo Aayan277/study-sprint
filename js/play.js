@@ -109,6 +109,7 @@ const typingTargets = (q, card) => answerTargets(q.answer === card.back && card.
 
 export async function renderPlay(el) {
   stopRound();
+  const drillIds = pendingDrill; pendingDrill = null;      // taken at once: leaving early can never start a drill later
   // Same data as Today and Review, so the exam's final pass (examCaps) and the new-card limits match theirs.
   // (loadAll gives every card too, as allCards, and with `history` the log rows since a moment: no second read of either.)
   const { settings, decks, cards: visible, allCards: everyCard, logs, statesById, exam, newLeft, history: speedLogs } = await loadAll({ history: true, fullHistory: true });
@@ -149,14 +150,15 @@ export async function renderPlay(el) {
   let pace = settings.timer;
 
   // A practice pass handed over by Review's finish screen: a drill of those cards (suspended ones too), never saved.
-  if (pendingDrill) {
-    const ids = new Set(pendingDrill); pendingDrill = null;
+  if (drillIds) {
+    const ids = new Set(drillIds);
     const drill = everyCard.filter(c => ids.has(c.id)).map(c => playCopy(lone.has(c.id) ? unpaired(c) : c));
     const have = new Set(cards.map(c => c.id));
     const pool = [...cards, ...drill.filter(c => !have.has(c.id))];
     const mcOk = canMultipleChoice(pool, 'front') && (canMultipleChoice(pool, 'back') || drill.some(isFrontOnly));
     const qtype = mcOk ? 'front' : 'typing';
     if (playableCards(drill, qtype).length) { start(el, { ...prefs, qtype, pace, pool, drill, practiceOnly: true }); return; }
+    toast('None of the missed cards can be practised here.');
   }
 
   // The question type a deck starts on: Typing when most of its cards are typing cards (type-in.js), else by the length of the backs.

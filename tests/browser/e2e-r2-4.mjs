@@ -33,5 +33,12 @@ await p.waitForTimeout(600);
 await p.evaluate(() => { const o = document.querySelector('#options:not([hidden]) .opt'); if (o) o.click(); else { const i = document.querySelector('#pInput'); i.value = 'zzz'; document.querySelector('#pType').requestSubmit(); } });
 await p.waitForTimeout(1500);
 ok((await snap()) === before, 'answering wrote no review log and changed no schedule (even with Play counting as reviews)');
+// nothing playable: a short notice and the normal setup; and a drill never lingers
+await p.evaluate(async () => { (await import('./js/play.js')).setPendingDrill(['no-such-card']); location.hash = '#/decks'; });
+await p.waitForSelector('.deck'); await p.evaluate(() => { location.hash = '#/play'; });
+await p.waitForSelector('#pDeck');
+ok(/None of the missed cards/.test(await p.textContent('#toast')), 'no playable missed card: a short notice, then the usual Play setup');
+await p.evaluate(() => { location.hash = '#/decks'; }); await p.waitForSelector('.deck'); await p.evaluate(() => { location.hash = '#/play'; }); await p.waitForSelector('#pDeck');
+ok(await p.locator('#pCard').count() === 0, 'and the drill is gone: coming back to Play shows the setup');
 ok(errors.length === 0, 'no page errors: ' + errors.join('|'));
 await browser.close();
