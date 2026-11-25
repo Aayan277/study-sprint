@@ -33,13 +33,13 @@ for (const clinical of [false, true]) {
     await db.saveDeck({ ...sample, examDate: new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10) });
     for (let i = 0; i < 7; i++) await db.addDeckWithCards({ id: 'x' + i, name: 'Extra ' + i, color: '#46A758', created: Date.now() }, [{ id: 'xc' + i, deckId: 'x' + i, front: 'q' + i, back: 'a', tags: [], created: Date.now() }]);
   });
-  await page.goto(APP + '#/today'); await page.waitForSelector('.exam-add .link');
-  await all44('today', '.exam-add .link', '"N more in Decks" link', { minW: 40 });
+  await page.goto(APP + '#/today'); await page.waitForSelector('#addExamBtn');
+  await all44('today', '#addExamBtn', '"Add exam date" button', { minW: 40 });
   await page.goto(APP + '#/settings'); await page.waitForSelector('.help-link');
   await page.evaluate(() => document.querySelectorAll('details').forEach(d => { d.open = true; }));
   await all44('settings', '.help-link', 'Settings "?" links', { minW: 44 });
   const ring = await page.evaluate(() => { const e = document.querySelector('b + .help-link'), c = getComputedStyle(e), r = e.getBoundingClientRect(), p = e.previousElementSibling; const pr = p?.getBoundingClientRect(); return { w: r.width, h: r.height, radius: c.borderRadius, border: c.borderTopWidth, sameLine: pr ? Math.abs((r.top + r.height / 2) - (pr.top + pr.height / 2)) < 8 : null, ml: c.marginLeft }; });
-  ok(ring.w === 24 && ring.h === 24 && ring.radius === '50%' && ring.border === '1px' && ring.sameLine === true && ring.ml === '6px', `${name}: "?" is a 24px ring next to its label ` + JSON.stringify(ring));
+  ok(ring.w === 24 && ring.h === 24 && ring.radius === '50%' && ring.border === '1px' && ring.sameLine === true && ring.ml === '8px', `${name}: "?" is a 24px ring next to its label ` + JSON.stringify(ring));
   // The enlarged tap area of a "?" never sits over the Reset button next to it (centre and edges of Reset hit Reset itself).
   const resetHits = await page.evaluate(() => [...document.querySelectorAll('.steps-input [data-reset]')].flatMap(b => {
     b.scrollIntoView({ block: 'center' });

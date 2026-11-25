@@ -14,6 +14,7 @@
 // at, applied (changes received), sent, error }.
 
 import * as db from './db.js';
+import { protectedMedia } from './trash-db.js';
 import { lastStatus, setStatus, account } from './sync-state.js';
 import * as supa from './supa.js';
 import { planSweep, markKey, GONE, droppedRefs } from './media-sweep.js';
@@ -96,13 +97,13 @@ export async function deviceVerdict(userId) {
   return { kind: 'other', ...mine, pending: await pendingChanges().catch(() => 0) };
 }
 
-// Complete a sign-in (or sign-up). onConflict(verdict) is asked first when the cards here aren't this account's, and answers
+// Complete a sign-in (or sign-up). onConflict(verdict, userId) is asked first when the cards here aren't this account's, and answers
 // 'go' (the person chose: for 'other' the app has already removed this device's cards; for 'local' the cards are added to the account)
 // or 'cancel'. Without an answer the sign-in is cancelled: another account's cards are never merged silently.
 async function signedIn(session, { onConflict } = {}) {
   const verdict = await deviceVerdict(session.user.id);
   if (verdict.kind !== 'ok') {
-    const answer = onConflict ? await onConflict(verdict) : 'cancel';
+    const answer = onConflict ? await onConflict(verdict, session.user.id) : 'cancel';
     if (answer !== 'go' || (verdict.kind === 'other' && (await deviceVerdict(session.user.id)).kind !== 'ok')) {
       await supa.signOut(session.access_token);          // (the server's sign-in made just now; nothing was saved here)
       throw new supa.SupaError('Sign-in cancelled. Nothing on this device was changed.', { code: 'cancelled' });
@@ -544,19 +545,24 @@ async function syncMedia(auth, person, savedBackoff) {
   });
   // Pictures and sounds no card uses any more: remove them here, and mark them for deletion from the account; the account's copy
   // goes 30 days later if still unused (media-sweep.js), in case another device still needs it.
-  const removed = await db.cleanMedia();
-  await sweepMedia(token, uid, removed, cards);
+  // Pictures and sounds of cards in Recently deleted stay for 30 days (js/trash.js). If that list can't be read, nothing new is marked
+  // or swept this time (inTrash is null); the rest of the sweep (un-marking, re-uploading) still runs. See trash-db.js protectedMedia.
+  const inTrash = await protectedMedia();
+  const removed = inTrash ? await db.cleanMedia(Date.now(), { keep: inTrash }) : [];
+  await sweepMedia(token, uid, removed, cards, inTrash);
   if (gate.full) return fullMessage(gate.full);
   if (gate.note) return gate.note;
   return blockedKinds.picture ? PICTURES_BLOCKED_NOTE : blockedKinds.sound ? SOUNDS_BLOCKED_NOTE : null;
 }
-async function sweepMedia(token, uid, removed, cards) {
+async function sweepMedia(token, uid, removed, cards, inTrash = new Set()) {
+  const blind = inTrash === null;          // the trash list could not be read: no new marks, no sweeping, no new snapshot of what cards use
   const { marks, gone } = await db.mediaMarks();
   // Files a card used last time and none does now, that this device never held (lazy loading): marked too, or the account would only grow.
-  const used = db.usedMediaIds(cards);
-  const dropped = droppedRefs({ prev: (await db.getSettings()).mediaRefs, used, userId: uid });
+  const used = new Set([...db.usedMediaIds(cards), ...(inTrash || [])]);          // (a file a trashed card uses is "used": un-marked, re-uploaded if the account lost it)
+  const dropped = blind ? [] : droppedRefs({ prev: (await db.getSettings()).mediaRefs, used, userId: uid });
   removed = [...new Set([...removed, ...dropped])];
   const plan = planSweep({ marks, gone, removed, used, held: new Set(await db.mediaKeys()), now: Date.now() });
+  if (blind) { plan.mark = []; plan.sweep = []; }
   const swept = [];
   for (const ids of chunks(plan.sweep, 100)) {
     try { await supa.deleteMedia(token, uid, ids); swept.push(...ids); } catch (err) { console.error(err); break; }      // a mark stays until its file is really gone
@@ -566,7 +572,7 @@ async function sweepMedia(token, uid, removed, cards) {
   const now = Date.now();
   await db.setSettings([...plan.mark.map(id => [markKey(id), now]), ...plan.unmark.map(id => [markKey(id), null]),
     ...swept.map(id => [markKey(id), GONE]), ...plan.reupload.map(id => [markKey(id), null]),
-    ['mediaRefs', { userId: uid, ids: [...used] }]]);          // (this device only: db.js LOCAL_ONLY)
+    ...(blind ? [] : [['mediaRefs', { userId: uid, ids: [...used] }]])]);          // (this device only: db.js LOCAL_ONLY)
 }
 async function fetchMedia(token, uid, id) {
   const got = await supa.downloadMedia(token, uid, id);

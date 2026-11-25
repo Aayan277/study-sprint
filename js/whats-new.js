@@ -8,8 +8,28 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
-  { version: '4.68', items: [
+  { version: '4.73', items: [
     'A new experiment in the Own model settings: a trust test that splits your cards between a new scheduling rule and plain FSRS-6, with a results table.',
+  ] },
+  { version: '4.72', items: [
+    'A new welcome screen: study less, remember more.',
+  ] },
+  { version: '4.71', items: [
+    'Clearer headings, and the round ? help buttons now line up with their text.',
+    'On a computer: Settings has a side list, Play rounds fill the screen, and Review buttons show their shortcut when you point at them.',
+    'The time on Start now says “about 17 min” instead of “~17 min”.',
+  ] },
+  { version: '4.70', items: [
+    'The first run no longer asks for a course: try the Sample deck or add your own cards.',
+    'On a computer, Decks shows one deck per row, with the menu always on the right.',
+  ] },
+  { version: '4.69', items: [
+    'Course code and Exam date now say they are optional when you make or edit a deck.',
+  ] },
+  { version: '4.68', items: [
+    'Anki import shows one line saying what comes along, with Change to see the options.',
+    'Once installed, the app can open Anki files offline after it has been online once.',
+    'Add exam date on Today is one button, and searching by tag on Decks now counts matching cards.',
   ] },
   { version: '4.67', items: [
     'Searching on the Decks screen now finds cards too, and deleting a deck offers to save a copy first.',

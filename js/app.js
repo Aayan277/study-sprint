@@ -7,10 +7,10 @@ import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, accentTitle } from './themes.js';
 import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
-import { initInstall } from './install.js';
+import { initInstall, isInstalled } from './install.js';
 import { initPanelResize } from './panel-resize.js';
 import { takeDraft } from './import-draft.js';
-import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty } from './ui.js';
+import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty, initHints } from './ui.js';
 import { account } from './sync-state.js';
 import { initWhatsNew } from './whats-new.js';
 import { takeLaunch } from './study-data.js';
@@ -25,7 +25,7 @@ import { initUpdates, showUpdateRequired } from './update.js';
 import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
 // Shown in Settings → About, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.68';
+const APP_VERSION = '4.73';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
@@ -191,7 +191,8 @@ async function route() {
   const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
   // (A running Review session counts as Today.)
-  const tab = name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name === 'help' ? 'settings' : name;
+  const onPc = matchMedia('(min-width: 1024px)').matches;      // (on a PC the Add cards button is the current item on the import screen, not Decks)
+  const tab = name === 'import' && onPc ? '' : name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name === 'help' ? 'settings' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
@@ -355,15 +356,30 @@ async function tidyMedia(now = Date.now()) {
   if (Number.isFinite(settings.mediaCleanedAt) && now - settings.mediaCleanedAt < MEDIA_TIDY_EVERY && now >= settings.mediaCleanedAt) return false;
   if (await account()) return false;
   if (!(await db.count('media'))) return false;       // (not noted: the first picture added is looked at on the next start)
-  await db.cleanMedia(now);
+  const inTrash = await (await import('./trash-db.js')).protectedMedia();      // pictures of cards in Recently deleted stay for 30 days
+  if (!inTrash) return false;
+  await db.cleanMedia(now, { keep: inTrash });
   settings.mediaCleanedAt = now;
   await db.setSetting('mediaCleanedAt', now);
   return true;
 }
 function tidyMediaWhenIdle() {
-  const run = () => tidyMedia().catch(() => {});
+  const run = () => { tidyMedia().catch(() => {}); import('./trash-db.js').then(t => t.purgeDaily()).catch(() => {}); };      // (and Recently deleted drops what is over 30 days old)
   if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 15000 });
   else setTimeout(run, 3000);
+}
+
+// Installed app, online, idle: save the Anki reader libraries once so Anki files open offline later (js/anki-read.js).
+function saveAnkiLibrariesWhenIdle() {
+  const run = () => {
+    // The same cheap test as shouldSaveAnkiLibraries (anki-read.js), done here first so a device that fails it never loads that file.
+    if (!(isInstalled() && navigator.onLine && navigator.serviceWorker?.controller && !navigator.connection?.saveData)) return;
+    import('./anki-read.js').then(m => {
+      return m.saveAnkiLibraries();
+    }).catch(() => {});
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 15000 });
+  else setTimeout(run, 5000);
 }
 
 // The server can name the oldest version allowed to sync (js/app-config.js). Asked once, after the first screen, only when signed in (a device that
@@ -396,6 +412,7 @@ async function start() {
   initTapGuard();
   wireGear();
   initSidebar({ version: APP_VERSION });
+  initHints();
   initWhatsNew({ version: APP_VERSION });
   watchMath();       // draws the maths on cards (js/math.js, loaded when the first formula appears) wherever it appears
   // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).
@@ -438,6 +455,7 @@ async function start() {
   initBadge();          // the due count on the app icon, when the person turned it on (badge.js)
   if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
   tidyMediaWhenIdle();
+  saveAnkiLibrariesWhenIdle();
   checkMinClient().catch(err => console.error(err));
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.
   if (!resetShown) { const kept = keptResetLink(); if (kept) showResetLink(kept); }

@@ -51,7 +51,6 @@ export async function startStudy(spec = {}) {
 }
 const launch = startStudy;
 const dismissedDay = () => { try { return Number(localStorage.getItem(RESCUE_DISMISS)) || null; } catch { return null; } };
-const EXAM_CHIPS = 4;            // how many courses the "Add exam date" row offers; the rest are one tap away in Decks
 
 export async function renderToday(el) {
   const data = await loadAll({ history: true });        // with the last 60 days of the log, not all of it
@@ -135,13 +134,9 @@ export async function renderToday(el) {
           </div>`).join('')}</div>
       </section>` : ''}
       ${noExam.length ? `
-      <div class="exam-add" role="group" aria-label="Add an exam date">
-        <span>Add exam date</span>
-        ${noExam.slice(0, EXAM_CHIPS).map(d => `<button type="button" class="exam-chip" data-addexam="${esc(d.id)}" aria-label="Add exam date for ${esc(d.name)}"><i style="background:${esc(d.color)}"></i>${esc(d.name)} ${icon('plus')}</button>`).join('')}
-        ${noExam.length > EXAM_CHIPS ? `<a class="link" href="#/decks">${noExam.length - EXAM_CHIPS} more in Decks</a>` : ''}
-      </div>` : ''}${exams.length || noExam.length ? '</div>' : ''}
+      <div class="exam-add"><button type="button" class="exam-chip" id="addExamBtn" aria-haspopup="dialog">${icon('calendar')} Add exam date</button></div>` : ''}${exams.length || noExam.length ? '</div>' : ''}
       <section class="section" aria-labelledby="tdTitle">
-        <div class="sec-head"><h2 id="tdTitle">Your decks</h2><a class="link" href="#/decks">All decks</a></div>
+        <div class="sec-head"><h2 id="tdTitle">Your decks</h2><a class="link" href="#/decks">All decks <span aria-hidden="true">→</span></a></div>
         <div class="tdecks">${top.map(d => deckRow(d, new Set(exams.map(e => e.deck.id)))).join('')}</div>
       </section>`}`;
     wire(c);
@@ -300,7 +295,7 @@ export async function renderToday(el) {
     $('allDecksBtn')?.addEventListener('click', () => { chosen = []; db.setSetting('reviewDecks', chosen); draw(); });
     el.querySelectorAll('[data-start]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.start], deckId: b.dataset.start })));
     el.querySelectorAll('[data-setnew]').forEach(b => b.addEventListener('click', () => askSetNew(b.dataset.setnew)));
-    el.querySelectorAll('[data-addexam]').forEach(b => b.addEventListener('click', () => openExamSheet(b.dataset.addexam, () => renderToday(el))));
+    $('addExamBtn')?.addEventListener('click', () => { const ids = coursesWithoutExam().map(d => d.id); openExamSheet(ids[0], () => renderToday(el), { choices: ids }); });
     el.querySelectorAll('[data-prep]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.prep], deckId: b.dataset.prep, kind: 'prep' })));
     // Exam week: a mock exam on the deck (js/mock-exam-sheet.js loads when first needed).
     el.querySelectorAll('[data-mock]').forEach(b => b.addEventListener('click', async () => (await import('./mock-exam-sheet.js')).openTestSheet(b.dataset.mock, { mock: true })));

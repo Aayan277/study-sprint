@@ -88,7 +88,6 @@ await setSetting('targetRetention', 0.9); await setSetting('fsrsVersion', 7);
 await openOwn();
 ok(await page.locator('#ownTrust').isDisabled() && await page.locator('#ownTrustWarn').count() === 0, 'with FSRS-7 it is off limits too');
 await setSetting('fsrsVersion', 6);
-await setSetting('fsrsVersion', 6);
 
 // the help answer
 await page.goto('http://localhost:8123/#/help/own-trust-test'); await page.waitForSelector('#h-own-trust-test');

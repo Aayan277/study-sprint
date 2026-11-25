@@ -156,23 +156,33 @@ await go(p, '#/decks', '.deck-tools');
 
 // ---------- B5: exam date in 3 taps ----------
 await go(p, '#/today', '.today-hero');
-let chips = await p.$$eval('[data-addexam]', c => c.map(x => x.dataset.addexam));
-ok([...chips].sort().join() === 'econ,law,span,zed', 'Today offers "Add exam date" for courses with cards and no exam (not the one with an exam, the empty one, or subdecks): ' + chips.join());
-ok(!(await p.$eval('.exam-add', e => e.textContent)).includes('Cell Biology') && !(await p.$eval('.exam-add', e => e.textContent)).includes('sample'), 'and not for Cell Biology or the sample deck');
+ok(await p.$$eval('#addExamBtn', b => b.length) === 1 && !(await p.$('[data-addexam]')), 'Today has one "Add exam date" button');
+await p.click('#addExamBtn'); await p.waitForSelector('#xdForm');
+let chips = await p.$$eval('#xdDeck option', o => o.map(x => x.value));
+ok([...chips].sort().join() === 'econ,law,span,zed', 'the Deck dropdown offers courses with cards and no exam (not the one with an exam, the empty one, or subdecks): ' + chips.join());
+ok(chips[0] === 'law' && await p.inputValue('#xdDeck') === 'law', 'largest first, and the first is preselected');
+const optText = await p.$eval('#xdDeck', e => e.textContent);
+ok(!optText.includes('Cell Biology') && !optText.includes('Sample deck'), 'and not for Cell Biology or the sample deck');
+await p.click('.sheet-x'); await p.waitForFunction(() => !document.getElementById('sheet').open);
 let taps = 0;
-await p.click('[data-addexam="span"]'); taps++; await p.waitForSelector('#xdForm');
-ok((await p.textContent('#sheetTitle')) === 'Spanish B1 exam', 'the sheet is named for the course');
+await p.click('#addExamBtn'); taps++; await p.waitForSelector('#xdForm');
+await p.selectOption('#xdDeck', 'span');
+ok((await p.textContent('#sheetTitle')) === 'Add exam date', 'the sheet is titled "Add exam date"');
 await p.click('[data-days="14"]'); taps++;
 ok(await p.inputValue('#xdDate') === isoIn(14) && await p.getAttribute('[data-days="14"]', 'aria-pressed') === 'true', 'the 2 weeks preset fills the date: ' + await p.inputValue('#xdDate'));
 await p.click('button[type=submit][form=xdForm]'); taps++;
 await p.waitForFunction(() => !document.getElementById('sheet').open);
 ok(taps === 3 && (await p.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.id === 'span').examDate)) === isoIn(14), 'three taps set deck.examDate to ' + isoIn(14));
 ok((await p.textContent('#toast')).includes('Spanish B1: exam in 14 days'), 'toast: ' + await p.textContent('#toast'));
-ok(await p.$$eval('.exam-row', r => r.some(x => x.textContent.includes('Spanish B1'))) && !(await p.$('[data-addexam="span"]')), 'the course is now under Upcoming exams, and its chip is gone');
+ok(await p.$$eval('.exam-row', r => r.some(x => x.textContent.includes('Spanish B1'))), 'the course is now under Upcoming exams');
+await p.click('#addExamBtn'); await p.waitForSelector('#xdForm');
+ok(!(await p.$('#xdDeck option[value="span"]')), 'and it is gone from the Deck dropdown');
+await p.click('.sheet-x'); await p.waitForFunction(() => !document.getElementById('sheet').open);
 const examStart = await p.evaluate(async d => (await import('./js/exam.js')).examStart(d), isoIn(14));
 ok((await state(p, 'span0')).due < examStart, 'the card that was scheduled after the exam was brought forward (the same pull-in as Edit deck)');
 // validation: a date that has passed
-await p.click('[data-addexam="econ"]'); await p.waitForSelector('#xdForm');
+await p.click('#addExamBtn'); await p.waitForSelector('#xdForm');
+await p.selectOption('#xdDeck', 'econ');
 await p.fill('#xdDate', isoIn(-3)); await p.click('button[type=submit][form=xdForm]');
 ok(await p.isVisible('#xdErr') && (await p.textContent('#xdErr')).includes('passed') && await p.evaluate(() => document.getElementById('sheet').open), 'a date in the past is refused, with a message');
 ok(!(await p.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.id === 'econ').examDate)), 'and nothing was saved');
@@ -321,13 +331,26 @@ await p.reload(); await p.waitForSelector('#deckGrid .deck');
 // ---------- B4 on a computer: tiles keep their own height ----------
 const tiles = () => p.$$eval('#deckGrid > .deck', d => d.map(x => { const r = x.getBoundingClientRect(); return { y: Math.round(r.y), h: Math.round(r.height) }; }));
 let t = await tiles(); const row1 = t.filter(x => x.y === t[0].y);
-ok(row1.length >= 3, 'three tiles in a row at 1440: ' + row1.length);
-const rowMates = await p.evaluate(() => { const ds = [...document.querySelectorAll('#deckGrid > .deck')].map(d => { const r = d.getBoundingClientRect(); return { y: Math.round(r.y), h: Math.round(r.height) }; }); const byRow = {}; for (const d of ds) (byRow[d.y] ||= []).push(d.h); return Object.values(byRow).some(hs => new Set(hs).size > 1); });
-ok(rowMates, 'in at least one row, tiles of different heights sit side by side');
+ok(row1.length === 1, 'Original on a computer: one deck per row at 1440: ' + row1.length);
+ok(await p.evaluate(() => { const g = document.querySelector('#deckGrid').getBoundingClientRect(); return [...document.querySelectorAll('#deckGrid > .deck')].every(d => Math.abs(d.getBoundingClientRect().width - g.width) < 2); }), 'the rows are the full width of the list');
 await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('compactDecks', false); });
 await p.reload(); await p.waitForSelector('#deckGrid .deck');
 ok(await p.evaluate(() => { const byRow = {}; for (const d of document.querySelectorAll('#deckGrid > .deck')) { const r = d.getBoundingClientRect(); (byRow[Math.round(r.y)] ||= []).push(Math.round(r.height)); } return Object.values(byRow).every(hs => new Set(hs).size === 1); }), 'off: tiles in a row all stretch to the same height, as before');
 await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('compactDecks', true); });
+
+// ---------- the "mastered" number is for Original on a computer only; the ring stays everywhere else ----------
+for (const [label, w, h, clinical] of [['Original at 390', 390, 844, false], ['Clinical at 1440', 1440, 900, true]]) {
+  const o = await open(w, h);
+  await o.p.goto('http://localhost:8123/#/decks'); await o.p.waitForSelector('.deck');
+  await seed(o.p);
+  if (clinical) await o.p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('theme', { ui: 'clinical', skin: 'violet', mode: 'light', oled: false }); });
+  await o.p.reload(); await o.p.waitForSelector('#deckGrid .deck');
+  const row = await o.p.evaluate(() => { const r = document.querySelector('[data-open="bio"]').closest('.deck'); const vis = s => { const e = r.querySelector(s); return !!e && getComputedStyle(e).display !== 'none'; }; return { ui: document.documentElement.dataset.ui, mastered: vis('.deck-mastered'), ring: vis('.deck-ring') }; });
+  ok((row.ui === 'clinical') === clinical, label + ': the right style is on: ' + row.ui);
+  ok(!row.mastered, label + ': ".deck-mastered" is not shown');
+  ok(row.ring, label + ': the ring is shown on the deck row');
+  await o.ctx.close();
+}
 
 // ---------- B7: three columns ----------
 await go(p, '#/deck/law', '.crow');

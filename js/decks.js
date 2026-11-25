@@ -5,7 +5,7 @@ import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, sav
 import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
-import { isHidden, cardMatcher, prefoldIdle } from './browse-logic.js';
+import { isHidden, searchCards, prefoldIdle } from './browse-logic.js';
 import { mountBrowser, presetBrowse } from './browse.js';
 import { examInfo, countdown, badgeNear, MOCK_DAYS } from './exam.js';
 import { drawSidebar } from './sidebar.js';
@@ -16,6 +16,7 @@ import { leftOutNote, fetchMissingFor } from './lazy-media.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 import { summariesByDeck, ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
 import { go as navGo, up } from './nav.js';
+import { keepDeleted, forgetLater } from './trash-lazy.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -137,14 +138,15 @@ export async function renderLibrary(el) {
           <span class="deck-counts">
             ${stats.total ? `<span><b>${stats.total.toLocaleString('en')}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
             <span class="due${c.due ? "" : " zero"}"><b>${c.due.toLocaleString('en')}</b> due</span>
-            <span><b>${c.fresh.toLocaleString('en')}</b> new</span>` : '<span>No cards yet</span>'}
+            <span><b>${c.fresh.toLocaleString('en')}</b> new</span>
+            <span class="deck-mastered"><b>${Math.round(learned * 100)}%</b> mastered</span>` : '<span>No cards yet</span>'}
             ${view.hits?.get(deck.id) ? `<span class="hit"><b>${view.hits.get(deck.id).toLocaleString('en')}</b> matching</span>` : ''}
           </span>
         </button>
         ${stats.total ? `<span class="deck-ring" role="img" aria-label="${Math.round(learned * 100)}% learned">${ring(learned, 44, 4, `<span class="mono">${Math.round(learned * 100)}<small>%</small></span>`)}</span>` : ''}
         <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
         <div class="deck-act">
-          ${!stats.total ? `<a class="${compact ? 'deck-go add' : 'btn ghost small'}" href="#/import/${esc(deck.id)}">+ Add cards</a>`
+          ${!stats.total ? `<a class="${compact ? 'deck-go add add-cards-btn' : 'btn ghost small'}" href="#/import/${esc(deck.id)}">+ Add cards</a>`
           : compact
             ? (go ? `<button class="deck-go${first ? ' lead' : ''}" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}" title="Study ${plural(go, 'card')}">${icon('play')}</button>`
                   : `<span class="deck-go done" role="img" aria-label="Done for today" title="Done for today">${icon('check')}</span>`)
@@ -200,21 +202,21 @@ export async function renderLibrary(el) {
       <span><b class="mono">${sum('total').toLocaleString('en')}</b> cards</span>
       <a class="link" href="#/today">Today ${icon('chevron')}</a>
     </div>`}
-    ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p id="cardHits" aria-live="polite" hidden></p><p class="note" id="deckNone" hidden></p>`
+    ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p id="cardHits"><span id="cardHitsLive" aria-live="polite"></span></p><p class="note" id="deckNone" hidden></p>`
     : emptyStartHTML()}
-    ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards →</a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
+    ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards <span aria-hidden="true">→</span></a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
   `;
 
   // The tiles are drawn from the search text and the sort, so both just redraw this part.
-  const grid = $('deckGrid'), hitsP = $('cardHits'), noneP = $('deckNone');
+  const grid = $('deckGrid'), hitsLive = $('cardHitsLive'), noneP = $('deckNone');
   const drawGrid = () => {
     if (!grid?.isConnected) return;
     const { q, rows } = shown();
     const firstDue = view.sort === 'due' ? rows.find(x => cnt(x.deck.id).total) : null;
     grid.innerHTML = rows.map(x => tile(x, q, x === firstDue)).join('');
     const total = view.hits ? top.reduce((n, x) => n + (view.hits.get(x.deck.id) || 0), 0) : 0;
-    hitsP.hidden = !total;
-    hitsP.innerHTML = total ? `<button class="link" type="button" id="showHits">Show ${total.toLocaleString('en')} matching ${total === 1 ? 'card' : 'cards'}</button>` : '';
+    const html = total ? `<button class="link" type="button" id="showHits">Show ${total.toLocaleString('en')} matching ${total === 1 ? 'card' : 'cards'}</button>` : '';
+    if (hitsLive && hitsLive.dataset.src !== html) { hitsLive.dataset.src = html; hitsLive.innerHTML = html; }      // only when it changed, so sort clicks are not announced again
     const none = rows.length === 0 && !view.pending;
     noneP.hidden = !none;
     noneP.textContent = none ? `No decks or cards match “${view.query.trim()}”.` : '';
@@ -222,7 +224,7 @@ export async function renderLibrary(el) {
   // The search also looks in the cards (front, back, tags) once you stop typing: one pass counts the matches per deck.
   const cardPass = q => {
     if (!grid?.isConnected) return;
-    const m = cardMatcher(q);
+    const m = searchCards(q);
     if (!m) { view.pending = false; drawGrid(); return; }
     const hits = new Map();
     for (const c of today.allCards) if (m(c)) for (const id of chains.get(c.deckId) || []) hits.set(id, (hits.get(id) || 0) + 1);
@@ -236,7 +238,7 @@ export async function renderLibrary(el) {
     view.query = e.target.value; view.hits = null;
     clearTimeout(searchTimer);
     const q = view.query;
-    view.pending = q.trim().length >= 2 && !/tag:/i.test(q);      // (a tag: search is not counted: Browse reads it differently)
+    view.pending = q.trim().length >= 2 && !!searchCards(q);
     drawGrid();
     if (view.pending) searchTimer = setTimeout(() => cardPass(q), 200);
     else grid.dataset.searched = q;
@@ -600,9 +602,9 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <label class="field"><span>Name</span>
         <input id="deckName" maxlength="80" required placeholder="e.g. Cell Biology" value="${esc(deck?.name || '')}" aria-describedby="deckErr"></label>
       <p class="err" id="deckErr" role="alert" hidden></p>
-      <label class="field"><span>Course code</span>
+      <label class="field"><span>Course code <span class="opt-tag">(optional)</span></span>
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
-      <label class="field"><span>Exam date</span>
+      <label class="field"><span>Exam date <span class="opt-tag">(optional)</span></span>
         <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}"></label>
       ${places.length ? `<label class="field"><span>Inside</span>
         <select id="deckParent" class="select"><option value="">Nothing (a top-level deck)</option>${places.map(c => `<option value="${esc(c.id)}" ${c.id === parentNow ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>` : '<input type="hidden" id="deckParent" value="">'}
@@ -716,11 +718,14 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       } catch { toast('Could not save a copy'); }
     });
     // Undo puts back every deck, card, schedule and review that the delete removed, and any subdeck that was moved up (db.restoreSnapshot).
-    const done = snap => {
+    // It is also kept in Recently deleted (js/trash.js); `moved` are the subdecks that were only moved up (kept apart as "before" rows).
+    const done = (snap, moved = []) => {
       closeSheet();
       db.holdMedia();
+      const kept = keepDeleted(snap, { kind: 'deck', title: deck.name, deckId: deck.id, before: { decks: moved } });
       toast(`Deleted “${deck.name}”`, undoOpts(async () => {
         await db.restoreSnapshot(snap);
+        forgetLater(kept);
         toast(`Restored “${deck.name}”`);
         drawSidebar();
         navGo(`#/deck/${deck.id}`);          // (the screen that opened the editor may be gone by now: show the deck itself)
@@ -737,7 +742,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       for (const d of moved) await db.saveDeck({ ...d, parentId: deck.parentId || '' });
       const snap = await db.deleteDeck(deck.id);
       snap.decks.push(...moved);          // the subdecks as they were, so Undo puts them back inside
-      done(snap);
+      done(snap, moved);
     });
   });
 }

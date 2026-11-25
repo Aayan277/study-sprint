@@ -212,12 +212,8 @@ async function audit(page, label) {
     ok(await page.evaluate(() => document.documentElement.dataset.ui === 'clinical'), `first run (${size} ${mode}) opens in Clinical`);
     await page.screenshot({ path: `${SP}/clinical-welcome-${size}-${mode}.png` });
     await audit(page, `first run ${size} ${mode}`);
-    // step through: name form, how to add cards
-    await page.click('#wlNext'); await page.waitForSelector('#wlForm');
-    await page.fill('#wlName', 'Cell Biology');
-    await page.screenshot({ path: `${SP}/clinical-welcome2-${size}-${mode}.png` });
-    await audit(page, `first run form ${size} ${mode}`);
-    await page.click('#wlForm button[type=submit]'); await page.waitForSelector('#wlSample');
+    // step through: how to add cards
+    await page.click('#wlNext'); await page.waitForSelector('#wlSample');
     await page.screenshot({ path: `${SP}/clinical-welcome3-${size}-${mode}.png` });
     await audit(page, `first run choices ${size} ${mode}`);
     await ctx.browser().close();
@@ -257,7 +253,7 @@ const SCENES = [
   { n: 'focus-decks', run: async p => { await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await focusRing(p, '.decks .deck-open, .decks .deck-go', 'a Decks row'); } },
   { n: 'focus-exam', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.exam-row'); await focusRing(p, '.exams a, .exams button', 'an exam row'); } },
   { n: 'done', data: 'done', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.th-done'); } },
-  { n: 'today-sheet', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('[data-addexam]'); await p.click('[data-addexam]'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
+  { n: 'today-sheet', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#addExamBtn'); await p.click('#addExamBtn'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
   { n: 'options', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#optBtn'); await p.click('#optBtn'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
   { n: 'streak', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#streakBtn'); await p.click('#streakBtn'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
   { n: 'review-front', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#flash'); await p.waitForTimeout(250); }, after: p => p.goto(URL + '#/today') },

@@ -709,3 +709,24 @@ export function subdeckPaths(names) {
   }
   return split.map(p => p.slice(shared));
 }
+
+// The one line above an Anki import's option switches: what comes along, what is left out, and what a re-import updates.
+// `o` has one entry per switch: undefined = the switch isn't shown for this file (nothing to say), true = on, false = off.
+// pictures is a plain true/false (the file has pictures or not). update is null, or { on, changed, old }.
+// Returns '' when there is nothing to say. (Pure text, no page code.)
+export function optionsSummary(o = {}) {
+  const NAMES = [['pictures', 'pictures'], ['sounds', 'sounds'], ['history', 'review history'], ['fields', 'other fields'], ['reverse', 'reverse cards'], ['subdecks', 'subdecks']];
+  const list = a => a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
+  const noun = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const kept = [], left = [];
+  for (const [key, name] of NAMES) {
+    if (o[key] === undefined || o[key] === null) continue;
+    (o[key] ? kept : left).push(name);
+  }
+  const out = [];
+  if (kept.length) out.push(`Keeps ${list(kept)}`);
+  if (left.length) out.push(`Leaves out ${list(left)}`);
+  const u = o.update;
+  if (u && u.old) out.push(!u.on ? `Adds a second copy of ${noun(u.old, 'card')} you already have` : u.changed > 0 ? `Updates ${noun(u.changed, 'card')} you already have` : `Skips ${noun(u.old, 'card')} you already have`);
+  return out.join(' · ');
+}

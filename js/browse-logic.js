@@ -217,6 +217,13 @@ export function parseTagSearch(query) {
 }
 // Does the card have the tag `path`, or a tag below it? (Ignores capitals; `path` as normTag gives it.)
 const hasTagUnder = (card, path) => tagWords(card.tags).some(t => { const n = normTag(t); return n === path || n.startsWith(path + SEP); });
+// A test for one card, the same one browseCards uses with the 'all' filter (tag: terms, then the words); null when the query has nothing to look for.
+export function searchCards(query) {
+  const { text, tags } = parseTagSearch(query);
+  const match = cardMatcher(text);
+  if (!tags.length && !match) return null;
+  return card => tags.every(p => hasTagUnder(card, p)) && (!match || match(card));
+}
 
 // "a b, c" → ['a', 'b', 'c'] (lower case, no blanks, no repeats). Tags are separated by spaces, commas or line breaks (like Anki, whose tags
 // can't contain spaces): the same rule tagWords (tag-tree.js) uses to read what is saved. A piece with nothing in it but colons ("a :: b") is dropped.

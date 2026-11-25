@@ -38,6 +38,8 @@ import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 
 
 // ---------- settings ----------
+// Recently deleted goes when this device is wiped (loaded only then).
+const emptyRecentlyDeleted = async () => { try { await (await import('./trash.js')).emptyAll(); } catch (err) { console.error(err); } };
 // Settings redrawn in place go into the screen's .view box (its width and padding come from that box: see styles.css).
 // null when there is none: the redraw is skipped rather than drawn straight into #screen.
 // One "More settings" fold per section (same look as Advanced scheduling). Open or closed is remembered on this device.
@@ -72,8 +74,7 @@ export async function renderSettings(el) {
     </nav>
 
     <section class="section" aria-labelledby="appearTitle">
-      <h2 id="appearTitle">Appearance</h2>
-      <p class="note">${helpLink('device-only', '?', 'Which settings apply to this device only')}</p>
+      <div class="h-row"><h2 id="appearTitle">Appearance</h2>${helpLink('device-only', '?', 'Which settings apply to this device only')}</div>
       <h3 class="set-sub" id="thTitle">${accentTitle(ui)}</h3>
       <div class="skins" id="skins">${skinButtonsHTML(skin)}</div>
       <h3 class="set-sub" id="apTitle">Light or dark</h3>
@@ -234,6 +235,10 @@ export async function renderSettings(el) {
       <div class="set-row">
         <div><b>${persisted ? 'Storage' : 'Pictures and sounds'}</b>${persisted ? '<p>Saved permanently on this device.</p>' : ''}
           <p class="note" id="mediaLine"></p></div>
+      </div>
+      <div class="set-row" id="trashRow">
+        <div><b>Recently deleted</b> ${helpLink('recently-deleted', '?', 'About Recently deleted')}</div>
+        <button class="btn ghost small" type="button" id="trashBtn">Open</button>
       </div>`)}
       ${persisted ? '' : `<div class="set-row" id="storageWarnRow"><div><b>Storage</b><p class="note usage-line warn" id="storageWarn">${storageWarnText()}</p></div></div>`}
       <div class="set-row" id="usageRow" hidden>
@@ -304,7 +309,7 @@ export async function renderSettings(el) {
     // A jump lands the heading at scroll-padding + scroll-margin, which can sit below the bar, so the line is the lower of the two
     const px = v => parseFloat(v) || 0;                       // scroll-padding can be 'auto'
     const landed = px(getComputedStyle(document.documentElement).scrollPaddingTop) + px(getComputedStyle(secs[0][0].querySelector('h2')).scrollMarginTop) + 4;
-    const line = Math.max(nav.getBoundingClientRect().bottom + 4, landed);
+    const line = getComputedStyle(nav).display === 'grid' ? landed : Math.max(nav.getBoundingClientRect().bottom + 4, landed);   // (a side list is not a bar over the page: only the landing line counts)
     const atEnd = Math.ceil(scrollY + innerHeight) >= document.documentElement.scrollHeight - 2;
     let cur = null;
     for (const [sec, a] of secs) if (sec.getBoundingClientRect().top <= line) cur = a;
@@ -361,6 +366,7 @@ export async function renderSettings(el) {
   drawSync();
   $('newBtn').addEventListener('click', async () => (await import('./whats-new.js')).openWhatsNewSheet());
   $('resetBtn').addEventListener('click', confirmReset);
+  $('trashBtn').addEventListener('click', async () => (await import('./trash-sheet.js')).openTrashSheet());
   $('exportBtn').addEventListener('click', exportBackup);
   fillMediaInfo();
   $('importIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) confirmRestore(f); });
@@ -665,6 +671,7 @@ async function confirmRestore(file) {
       // (Any other failure, such as being offline, goes on as before: the backup is applied here and sent when there's a connection.)
       if (synced && ['busy', 'skipped'].includes((await sync.syncNow()).reason)) { closeSheet(); toast('Another window is syncing. Try again in a moment. Nothing was changed.'); return; }
       await db.importAll(data, { everywhere: synced });
+      await emptyRecentlyDeleted();          // the backup replaces everything, so what was waiting in Recently deleted goes too
     } catch (e) {
       console.error(e);
       closeSheet();
@@ -734,6 +741,7 @@ function confirmResetSynced() {
       return;
     }
     await db.deleteEverything();
+    await emptyRecentlyDeleted();
     refreshBadgeNow();            // nothing is due any more: the app icon's number goes
     // Study settings back to their defaults (they sync); the theme stays.
     for (const [k, v] of Object.entries(db.DEFAULT_SETTINGS)) if (SYNCED_SETTINGS.includes(k)) await db.setSetting(k, v);
@@ -807,6 +815,7 @@ export async function drawSync() {
       try {
         // With a captcha set up (sync-config.js), the "are you a person?" box comes first; its token goes with the request.
         const captcha = await captchaToken();
+        claimAfterSignIn = null;
         const opts = { onConflict: askAboutDevice };      // cards here from someone else (or from no account) are never merged without a choice
         const made = await (create ? sync.createAccount(email, pw, captcha, opts) : sync.signIn(email, pw, captcha, opts));
         if (made?.pending) {                  // Supabase emailed a confirmation link: nobody is signed in yet
@@ -829,6 +838,7 @@ export async function drawSync() {
           });
           return;
         }
+        if (claimAfterSignIn) { try { await (await import('./trash.js')).claim(claimAfterSignIn); } catch (err) { console.error(err); } claimAfterSignIn = null; }
         db.setSetting('pendingSignup', null);
         toast(create ? 'Account created. Syncing…' : 'Signed in. Syncing…');
         drawSync();
@@ -961,7 +971,8 @@ export async function drawDamaged() {
 
 // Asked by sync.signIn / createAccount before anything is merged, when this device holds cards that aren't this account's.
 // Answers 'go' or 'cancel'. "Remove them" wipes this device first (the account that owns them keeps its copy).
-function askAboutDevice(v) {
+let claimAfterSignIn = null;
+function askAboutDevice(v, userId) {
   return new Promise(resolve => {
     let settled = false;
     const finish = answer => { if (!settled) { settled = true; resolve(answer); } };
@@ -998,7 +1009,11 @@ function askAboutDevice(v) {
     $('devCancel').addEventListener('click', () => { finish('cancel'); closeSheet(); });
     $('devRemove')?.addEventListener('click', wipeThen);
     $('devFresh')?.addEventListener('click', wipeThen);
-    $('devAdd')?.addEventListener('click', () => { finish('go'); closeSheet(); });
+    $('devAdd')?.addEventListener('click', async () => {
+      // The cards become this account's (and so does what was deleted from them while signed out) only once the sign-in has worked: see claimAfterSignIn. Cancel and Start fresh never claim it.
+      claimAfterSignIn = userId || null;
+      finish('go'); closeSheet();
+    });
   });
 }
 
@@ -1268,6 +1283,7 @@ async function wipeThisDevice() {
   clearDraft();                   // pasted text on the Import screen belongs to the data that was just wiped
   const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime, whatsNewSeen } = app.settings;
   await db.resetAll();
+  await emptyRecentlyDeleted();          // Recently deleted is part of this device's data
   try { await (await import('./own-gate.js')).wipeOwn(); } catch (err) { console.warn('Own model:', (err && err.message) || err); }      // Own's separate database goes too
   clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);

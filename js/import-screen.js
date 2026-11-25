@@ -3,7 +3,7 @@
 
 import * as db from './db.js';
 import { parseText, parseBlocks, parseRows, buildCards, hasKeptFields, basicFieldsCut, isComplete, findDuplicates, dupKey, clearDupKeys, sheetsCsvUrl, claudePrompt } from './import.js';
-import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
+import { optionsSummary, notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
 import { canReverse, reverseOf } from './reverse.js';
 import { indexByGuid, matchRows, rowSlot, slotOf, noteIdMap, applyUpdate, classifyRow, contentSig, MEDIA } from './anki-match.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
@@ -17,7 +17,7 @@ import { examOptions } from './exam.js';
 import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
-import { $, esc, plural, toast, dismissToast, icon, undoOpts } from './ui.js';
+import { $, esc, plural, toast, dismissToast, icon, undoOpts, foldOpen, saveFold } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
 import { sharedKind } from './share-logic.js';
 import { readDocument, isDocFile, pagesToText, pagesToMarkdown, textPages, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
@@ -184,6 +184,9 @@ export async function renderImport(el, arg) {
         <label class="field"><span>Front</span><select id="frontCol"></select></label>
         <label class="field"><span>Back</span><select id="backCol"></select></label>
       </div>
+      <p class="anki-sum" id="ankiSum" hidden><span id="ankiSumText"></span>
+        <button class="link" type="button" id="ankiChange" aria-expanded="false" aria-controls="importOpts">Change</button></p>
+      <div id="importOpts">
       <label class="adv-row switch-row prog-row" id="updRow" hidden><span><b id="updTitle">Update the cards you already have (keeps your progress)</b>
         <span id="updInfo"></span></span>
         <input id="updateOld" type="checkbox" class="switch" checked></label>
@@ -205,6 +208,7 @@ export async function renderImport(el, arg) {
       <label class="adv-row switch-row prog-row" id="subRow" hidden><span><b>Keep Anki's subdecks</b>
         <span id="subInfo"></span></span>
         <input id="ankiSubs" type="checkbox" class="switch" checked></label>
+      </div>
       <div class="pane-actions">
         <button class="btn ghost small" type="button" id="swapBtn">${icon('swap')} Swap front and back</button>
         <button class="btn ghost small" type="button" id="dupBtn" hidden>Remove duplicates</button>
@@ -378,12 +382,15 @@ function wireFile() {
       if (err?.message !== 'not-anki') console.error(err);      // (a file that isn't an Anki deck is expected: the message below says so)
       $('fileName').textContent = file.name;          // (clears "reading…")
       if (err?.code === 'too-big' || err?.code === 'no-wasm') { showError(err.message); return; }      // an Anki file that unpacks huge (anki-read.js): it says why
+      if (err?.code === 'no-library') { showError(`Couldn't read ${file.name}. ${noLibraryWhy()}`); return; }      // the Anki reader did not download: not the file's fault
       const anki = /\.(apkg|colpkg)$/i.test(file.name);
       showError(`Couldn't read ${file.name}. ${!navigator.onLine ? `${anki ? 'Anki' : 'Excel'} files need an internet connection the first time.`
         : anki ? 'Is it an Anki deck exported from Anki (File → Export → Anki Deck Package)?' : 'Is it a .csv, .txt or .xlsx file?'}`);
     }
   });
 }
+
+const noLibraryWhy = () => navigator.onLine ? "The Anki reader didn't download. Check your connection, or close and reopen the app, then try again." : 'Anki files need an internet connection the first time.';
 
 // A whole-app backup is restored from Settings (it replaces everything), not added as cards.
 async function explainJson(file) {
@@ -485,14 +492,15 @@ function wireDoc() {
   });
   $('aiBack').addEventListener('click', pasteAnswer);
   $('pasteAnsBtn').addEventListener('click', pasteAnswer);
-  // One primary button in the paste area: the answer button while the Claude note or the AI view shows, else Suggest cards.
+  // One primary button in the paste area: the answer button while the Claude note or the AI view shows; once a preview has cards, the
+  // Add button is the only filled one; else Suggest cards.
   const syncPrimary = () => {
-    const answer = !$('claudeNote').hidden || !$('aiView').hidden;
+    const answer = !$('claudeNote').hidden || !$('aiView').hidden || !$('preview').hidden;
     $('suggestBtn').classList.toggle('primary', !answer);
     $('suggestBtn').classList.toggle('ghost', answer);
   };
   const mo = new MutationObserver(syncPrimary);
-  for (const id of ['claudeNote', 'aiView']) mo.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+  for (const id of ['claudeNote', 'aiView', 'preview']) mo.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
   syncPrimary();
 }
 
@@ -597,7 +605,7 @@ async function takeShared() {
       else if (kind === 'json') await explainJson(file);
       else if (kind === 'unknown') showError("Study Sprint can't read that kind of file. Share a deck file (.apkg), PDF, PowerPoint or text.");
       else { S.noCloze = false; showText(await file.text()); }
-    } catch (err) { console.error(err); $('fileName').textContent = file.name; if (err?.code === 'too-big' || err?.code === 'no-wasm') { showError(err.message); return; } showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
+    } catch (err) { console.error(err); $('fileName').textContent = file.name; if (err?.code === 'too-big' || err?.code === 'no-wasm') { showError(err.message); return; } if (err?.code === 'no-library') { showError(`Couldn't read ${file.name}. ${noLibraryWhy()}`); return; } showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
     return;
   }
   // Text, a link, or only a title (some apps put what they share in the title).
@@ -821,6 +829,12 @@ function wirePreview() {
     renderList();
   });
 
+  $('ankiChange').addEventListener('click', () => {
+    saveFold('import-anki', $('importOpts').hidden);      // (hidden now = being opened)
+    refreshFlags();
+  });
+  $('ankiProg').addEventListener('change', () => refreshFlags());
+  $('ankiSubs').addEventListener('change', () => refreshFlags());
   $('ankiSounds').addEventListener('change', e => { S.bringSounds = e.target.checked; refreshFlags(); });
   $('keepFields').addEventListener('change', e => {
     S.keepFields = e.target.checked;
@@ -1054,6 +1068,25 @@ function refreshFlags() {
   const subs = new Set(subdeckPaths(S.cards.map(c => c.ankiDeck)).filter(p => p.length).map(p => p[0]));
   $('subRow').hidden = !subs.size;
   if (subs.size) $('subInfo').textContent = `Makes ${plural(subs.size, 'subdeck')} (${[...subs].slice(0, 3).join(', ')}${subs.size > 3 ? ', …' : ''}) inside the deck you add them to.`;
+  // Anki files: the switches sit in #importOpts behind one summary line and a Change link (open or closed is remembered on this device).
+  {
+    const isAnki = S.result.format.id === 'anki';
+    const any = ['updRow', 'editRow', 'progRow', 'soundRow', 'fieldsRow', 'revRow', 'subRow'].some(id => !$(id).hidden);
+    const open = !(isAnki && any) || foldOpen('import-anki');
+    $('ankiSum').hidden = !(isAnki && any);
+    $('importOpts').hidden = !open;
+    $('ankiChange').textContent = open ? 'Done' : 'Change';
+    $('ankiChange').setAttribute('aria-expanded', String(open));
+    if (isAnki && any) $('ankiSumText').textContent = optionsSummary({
+      pictures: S.result.images ? true : undefined,      // (a deck with no pictures says nothing about them)
+      sounds: snd.files.length ? S.bringSounds : undefined,
+      history: prog?.cards ? $('ankiProg').checked : undefined,
+      fields: S.hasFields ? S.keepFields : undefined,
+      reverse: reversible ? S.makeReverse : undefined,
+      subdecks: subs.size ? $('ankiSubs').checked : undefined,
+      update: oldN ? { on: S.updateOld, changed: kinds.safe + (S.overwriteEdited ? kinds.edited : 0), old: oldN } : null,
+    });
+  }
   if (missing) parts.push(`<span class="warn">${plural(missing, 'row')} missing a side will be skipped.</span>`);
   if (dups) parts.push(`<span class="warn">${plural(dups, 'possible duplicate')} flagged.</span>`);
   // (written only when it changed, so a screen reader does not read it out again at every tick)
@@ -1544,12 +1577,12 @@ async function save() {
 
 // Where the Add button sits. On a PC it is the bar at the bottom of the page (sticky above the page's end). On a phone or tablet a
 // bar stuck to the bottom of the screen covered the "Preview" heading and the "Found…" line whenever they were near the fold, so
-// there the button goes after the option switches (Update the cards…, Overwrite…, and the rest), under the "Found…" line, and sticks under the header while the list scrolls (css: .savebar in #preview).
+// there the button goes after the option switches' box (Update the cards…, Overwrite…, and the rest), under the "Found…" line, and sticks under the header while the list scrolls (css: .savebar in #preview).
 function placeSaveBar() {
   const bar = $('savebar'), mq = matchMedia('(max-width:1023.98px)');
   const place = () => {
     if (!bar.isConnected) { mq.removeEventListener('change', place); return; }
-    if (mq.matches) $('subRow').after(bar); else $('preview').after(bar);
+    if (mq.matches) $('importOpts').after(bar); else $('preview').after(bar);
   };
   place();
   mq.addEventListener('change', place);

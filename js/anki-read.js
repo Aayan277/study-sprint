@@ -10,8 +10,8 @@
 import { mediaList, templateFormats } from './anki.js';
 
 export const FFLATE_URL = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js';
-const FZSTD_URL = 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/esm/index.mjs';
-const SQLJS_BASE = 'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/';
+export const FZSTD_URL = 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/esm/index.mjs';
+export const SQLJS_BASE = 'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/';
 
 // A "zip bomb" is a small file that unpacks to something huge. What is unpacked from a deck file (the database and the list of
 // pictures: together, and each picture or sound later on) and what the zstd unpacker writes out may not pass this, the same
@@ -37,8 +37,17 @@ export function unzstd(zstd, bytes, cap = MAX_UNPACKED) {
   return out;
 }
 
-export async function readAnkiFile(file) {
-  const { unzipSync } = await import(FFLATE_URL);
+// A library that did not download (no connection, a blocked or failed request) is its own error, so the screen can say so
+// instead of blaming the file. `load` is the loader (a test passes its own).
+export async function loadLibrary(load) {
+  try { return await load(); } catch (err) {
+    if (err?.code === 'no-wasm' || err?.code === 'too-big') throw err;
+    throw Object.assign(new Error('no-library'), { code: 'no-library', cause: err });
+  }
+}
+
+export async function readAnkiFile(file, load = u => import(u), sql = loadSqlJs) {
+  const { unzipSync } = await loadLibrary(() => load(FFLATE_URL));
   const zip = new Uint8Array(await file.arrayBuffer());
   let files;
   const entrySizes = new Map();      // zip member name → its size when unpacked (older files; in newer ones the list says)
@@ -62,13 +71,13 @@ export async function readAnkiFile(file) {
   }
   // Newest format first. Newer files also hold an old-format collection.anki2 that only says "please update Anki".
   const newFormat = !!files['collection.anki21b'];
-  const zstd = newFormat ? await import(FZSTD_URL) : null;
+  const zstd = newFormat ? await loadLibrary(() => load(FZSTD_URL)) : null;
   let bytes = null;
   if (newFormat) bytes = unzstd(zstd, files['collection.anki21b']);
   else bytes = files['collection.anki21'] || files['collection.anki2'];
   if (!bytes) throw new Error('not-anki');
 
-  const SQL = await loadSqlJs();
+  const SQL = await loadLibrary(sql);
   const db = new SQL.Database(bytes);
   let result;
   try {
@@ -251,4 +260,30 @@ function readCollection(db) {
     cards: cardsOfNote.get(id) || {}
   }));
   return { notes, models, reviews };
+}
+
+// Installed app only: when online and idle, load the four Anki libraries once through the service worker, which saves them, so
+// importing (and exporting) an Anki file works offline later. A file already saved is skipped; nothing here throws.
+// Returns how many files it tried to load. (The pinned URLs and fingerprints are the ones above; the import map checks the two modules.)
+export const shouldSaveAnkiLibraries = ({ installed, online, controlled, saveData } = {}) => !!(installed && online && controlled && !saveData);
+export async function saveAnkiLibraries({
+  cache = globalThis.caches,
+  load = u => import(u),
+  get = (u, integrity) => fetch(u, { integrity, mode: 'cors' }),
+} = {}) {
+  let tried = 0;
+  const files = [
+    { url: FFLATE_URL }, { url: FZSTD_URL },
+    { url: SQLJS_BASE + 'sql-wasm.js', integrity: SQLJS_JS_INTEGRITY },
+    { url: SQLJS_BASE + 'sql-wasm.wasm', integrity: SQLJS_WASM_INTEGRITY },
+  ];
+  for (const { url, integrity } of files) {
+    try {
+      if (cache && await cache.match(url)) continue;
+      tried++;
+      if (integrity) { const res = await get(url, integrity); if (res?.ok) await res.arrayBuffer(); }
+      else await load(url);
+    } catch { /* offline or blocked: tried again at the next start */ }
+  }
+  return tried;
 }

@@ -24,6 +24,8 @@ const dump = (page, cardIds) => page.evaluate(async ids => {
 }, cardIds);
 const same = (a, b) => JSON.stringify({ ...a, cards: Object.values(a.cards).map(strip), states: Object.values(a.states).map(strip), logs: a.logs.map(strip), decks: a.decks.map(strip) })
   === JSON.stringify({ ...b, cards: Object.values(b.cards).map(strip), states: Object.values(b.states).map(strip), logs: b.logs.map(strip), decks: b.decks.map(strip) });
+// Recently deleted (js/trash.js): every delete also makes an entry on this device; Undo takes it out again so nothing shows twice.
+const trashCount = page => page.evaluate(async () => (await (await import('./js/trash-db.js')).listEntries()).length);
 const undoClick = async page => { await page.waitForSelector('#toast:not([hidden]) .toast-link'); await page.click('#toast .toast-link'); };
 
 // ---------- signed out: a card (panel), several cards (Select), a deck, an import ----------
@@ -53,9 +55,11 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   ok((await page.textContent('#toast')).includes('Card deleted') && (await page.textContent('#toast .toast-link')) === 'Undo', 'single delete shows an Undo toast');
   const gone = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).length);
   ok(gone === 11 && !(await page.evaluate(async id => !!(await (await import('./js/db.js')).get('cards', id)), ids[0])), 'the card is deleted (11 left)');
+  ok(await trashCount(page) === 1, 'the delete made one Recently deleted entry');
   await page.click('#toast .toast-link');
   await page.waitForFunction(() => document.querySelectorAll('.crow').length === 12);
   ok(same(before, await dump(page, ids)), 'Undo: the card is back exactly (tags, flag, picture link, schedule and every review row)');
+  ok(await trashCount(page) === 0, 'Undo: no Recently deleted entry is left for it');
   ok(!(await page.evaluate(async () => (await (await import('./js/db.js')).getAll('deleted')).some(t => t.store === 'cards'))), 'and its delete markers are gone');
 
   // several, with Select
@@ -70,6 +74,7 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   await page.waitForFunction(() => document.querySelectorAll('.crow').length === 12);
   const after = await dump(page, ids);
   ok(same(before, after), 'Undo: all 3 cards are back exactly, with their 6 review rows and the same ids');
+  ok(await trashCount(page) === 0, 'bulk Undo: no Recently deleted entry is left');
 
   // a deck with a subdeck, an exam date, cards and history
   await page.evaluate(async () => {
@@ -89,6 +94,7 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   await page.waitForFunction(() => /#\/deck\/top/.test(location.hash));
   const deckAfter = await dump(page, ['t1', 's1', 's2']);
   ok(same(deckBefore, deckAfter) && deckAfter.decks.some(d => d.id === 'top' && d.examDate === '2031-05-04') && deckAfter.decks.some(d => d.id === 'sub' && d.parentId === 'top'), 'Undo: deck, subdeck, exam date, cards, flags, schedule and history are all back');
+  ok(await trashCount(page) === 0, 'deck Undo: no Recently deleted entry is left');
 
   // "Delete, keep subdecks" then Undo: the subdeck goes back inside
   await openDelete(); await page.click('#delKeep'); await page.waitForSelector('.deck');
@@ -97,6 +103,7 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   await page.waitForFunction(() => /#\/deck\/top/.test(location.hash));
   const keepAfter = await dump(page, ['t1', 's1', 's2']);
   ok(same(deckBefore, keepAfter), 'Undo of keep-subdecks: Sub is inside Top again, everything as before');
+  ok(await trashCount(page) === 0, 'keep-subdecks Undo: no Recently deleted entry is left');
 
   // an import
   const n0 = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).length);
@@ -260,6 +267,7 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   await page.waitForFunction(() => /Card restored/.test(document.querySelector('#toast')?.textContent || ''));
   const mid = await dump(page, ['LC1', 'LC2']);
   ok(same(before, mid), 'Undo brings the card, its schedule and both log rows back exactly');
+  ok(await trashCount(page) === 0, 'leech Delete Undo: no Recently deleted entry is left');
   // Split, delete the original, then Undo
   await page.click('.coach-row[data-id=LC1] [data-act=split]'); await page.waitForSelector('#splitForm');
   await page.check('input[name=splitOrig][value=delete]');
@@ -271,6 +279,7 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   await page.waitForFunction(() => /Card restored/.test(document.querySelector('#toast')?.textContent || ''));
   const after = await dump(page, ['LC1', 'LC2']);
   ok(same(before, after), 'Undo restores the original with its schedule and history');
+  ok(await trashCount(page) === 0, 'split Undo: no Recently deleted entry is left');
   ok(await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.front === 'Primary colours').length === 1), 'Undo removes the split parts: only the original is left');
   await page.context().close();
 }
@@ -297,6 +306,7 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   await page.waitForFunction(() => /Card restored/.test(document.querySelector('#toast')?.textContent || ''));
   const after = await dump(page, ['PA', 'PB']);
   ok(same(before, after), 'Undo: both cards are back and paired again');
+  ok(await trashCount(page) === 0, 'pair Undo: no Recently deleted entry is left');
   await page.context().close();
 }
 if (errors.length) { console.log('FAIL errors: ' + errors.join(' | ')); process.exitCode = 1; } else ok(true, 'no page errors');

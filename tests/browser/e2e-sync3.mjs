@@ -166,7 +166,7 @@ await B.click('#soRemove');
 await B.waitForFunction(() => /synced yet and would be lost/.test(document.querySelector('#soNote')?.textContent || ''), null, { timeout: 5000 }).then(() => ok(true, 'removing with unsynced changes warns first'), () => ok(false, 'removing with unsynced changes warns first'));
 await B.click('#soRemove'); await B.waitForSelector('.deck');
 b = await snapshot(B);
-ok(!b.signedIn && b.decks.join() === 'Intro to Psychology (sample)' && !b.settings.syncState, 'second tap: signed out and this device is fresh');
+ok(!b.signedIn && b.decks.join() === 'Sample deck' && !b.settings.syncState, 'second tap: signed out and this device is fresh');
 fake.setDown(false);
 
 // ---- stale warning ----
@@ -214,7 +214,7 @@ ok(fake.userRows('me@example.com').some(r => r.store === 'decks' && r.id === 'hi
 await openSettings(B);
 await B.click('#dangerZone > summary'); await B.click('#resetBtn'); await B.click('#rsHere'); await B.waitForSelector('.deck');
 b = await snapshot(B);
-ok(!b.signedIn && b.decks.join() === 'Intro to Psychology (sample)' && fake.userRows('me@example.com').some(r => r.id === 'geo' && !r.deleted), 'reset just this device: B fresh and signed out, account untouched');
+ok(!b.signedIn && b.decks.join() === 'Sample deck' && fake.userRows('me@example.com').some(r => r.id === 'geo' && !r.deleted), 'reset just this device: B fresh and signed out, account untouched');
 
 // ---- progress on a big first sync ----
 const D = await device('D');

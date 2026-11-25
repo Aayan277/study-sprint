@@ -23,6 +23,7 @@ import { ancestors, subtreeIds, deckPath, deckChoices, effectiveDeck } from './d
 import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher, undoOpts } from './ui.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { go as navGo } from './nav.js';
+import { keepDeleted, forgetLater } from './trash-lazy.js';
 
 const factsMemo = new WeakMap();      // typeFacts per card object (a changed card is a new object)
 const factsOf = card => factsMemo.get(card) || (factsMemo.set(card, typeFacts(card)), factsMemo.get(card));
@@ -644,9 +645,12 @@ async function saveWithReverse(card, pair, both, sides, shared, ops, msg) {
   return go();
 }
 // After a delete: the toast offers Undo, which puts the cards back with their schedules and history (db.restoreSnapshot), then refreshes.
-function deleted(snap, msg, ctx, again) {
+// It is also kept in Recently deleted (js/trash.js) for 30 days; Undo takes that entry out again so it does not show twice.
+// `before`: cards the delete only changed (a partner that turned into an ordinary card), as they were.
+function deleted(snap, msg, ctx, again, before) {
   db.holdMedia();
-  return again(msg, 'delete', undoOpts(async () => { await db.restoreSnapshot(snap); toast(snap.cards.length === 1 ? 'Card restored' : 'Cards restored'); await (ctx.refresh || (async () => {}))(); }));
+  const kept = keepDeleted(snap, { before });          // (not waited for: the toast and its Undo come at once)
+  return again(msg, 'delete', undoOpts(async () => { await db.restoreSnapshot(snap); forgetLater(kept); toast(snap.cards.length === 1 ? 'Card restored' : 'Cards restored'); await (ctx.refresh || (async () => {}))(); }));
 }
 // Deleting one card of a pair: both, or just this one (the other turns into an ordinary card).
 function askDeletePair(card, partner, again, ctx) {
@@ -655,7 +659,7 @@ function askDeletePair(card, partner, again, ctx) {
     <button class="btn danger solid" type="button" id="cfBoth">Delete both</button></div></div>`;
   $('cfNo').addEventListener('click', () => { $('ceConfirm').innerHTML = ''; });
   $('cfBoth').addEventListener('click', () => guardedGo(() => db.deleteCards([card.id, partner.id]).then(snap => deleted(snap, 'Both cards deleted', ctx, again))));
-  $('cfOnly').addEventListener('click', () => guardedGo(async () => { const snap = await db.deleteCards([card.id]); snap.cards.push(partner); await db.saveCards([unpaired(partner)]); return deleted(snap, 'Card deleted', ctx, again); }));
+  $('cfOnly').addEventListener('click', () => guardedGo(async () => { const snap = await db.deleteCards([card.id]); snap.cards.push(partner); await db.saveCards([unpaired(partner)]); return deleted(snap, 'Card deleted', ctx, again, { cards: [partner] }); }));
   $('cfBoth').scrollIntoView({ block: 'nearest' });
 }
 
@@ -830,9 +834,10 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       const gone = new Set(selected.map(c => c.id)), notes = new Set(selected.filter(isPair).map(c => c.noteId));
       const left = notes.size ? (await db.getAll('cards')).filter(c => isPair(c) && notes.has(c.noteId) && !gone.has(c.id)) : [];
       if (left.length) { snap.cards.push(...left); await db.saveCards(left.map(unpaired)); }
+      const kept = keepDeleted(snap, { before: { cards: left } });
       clear();
       closeSheet();
-      toast(`Deleted ${plural(n, 'card')}`, undoOpts(async () => { await db.restoreSnapshot(snap); toast(`Restored ${plural(n, 'card')}`); await refresh(); }));
+      toast(`Deleted ${plural(n, 'card')}`, undoOpts(async () => { await db.restoreSnapshot(snap); forgetLater(kept); toast(`Restored ${plural(n, 'card')}`); await refresh(); }));
       return refresh();
     });
   }));

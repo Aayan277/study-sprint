@@ -140,7 +140,7 @@ ok((await page.textContent('.rv-front .flash-front')).includes('hear') && (await
 ok(await page.getAttribute('.rv-front .snd-btn', 'aria-label') === 'Play sound', 'Review: the ▶ has a label');
 await page.waitForFunction(() => window.__plays.length >= 1);
 ok((await playSizes()).join() === '1001', `Review: the front's sound played by itself when the card appeared (${await playSizes()})`);
-ok(await page.title() !== '' && (await page.getAttribute('#speakBtn', 'title')) === 'Play the sound or read aloud (R)', 'Review: the speaker button says it plays the sound');
+ok(await page.title() !== '' && (await page.getAttribute('#speakBtn', 'data-hint')) === 'Play the sound or read aloud' && (await page.getAttribute('#speakBtn', 'data-hint-key')) === 'R', 'Review: the speaker button says it plays the sound');
 await reset();
 await page.keyboard.press('r');
 await page.waitForFunction(() => window.__plays.length >= 1);
@@ -164,7 +164,7 @@ await reset();
 await page.keyboard.press('r');
 await page.waitForFunction(() => window.__speaks.length >= 1);
 ok((await run(() => window.__speaks.join('|'))) === 'plain' && (await run(() => window.__plays.length)) === 0, 'Review: R still reads aloud a side with no sound');
-ok((await page.getAttribute('#speakBtn', 'title')) === 'Read aloud (R)', 'Review: and the button says so');
+ok((await page.getAttribute('#speakBtn', 'data-hint')) === 'Read aloud' && (await page.getAttribute('#speakBtn', 'data-hint-key')) === 'R', 'Review: and the button says so');
 await page.click('#showBtn'); await page.keyboard.press('3');
 await page.waitForSelector('#showBtn');
 ok((await page.locator('.rv-front .snd-btn').count()) === 1 && (await page.textContent('.rv-front .flash-front')).replace(/[▶\uFE0E]/g, '').trim() === '', 'Review: a sound on a side with no text still plays (a ▶ and no text)');
