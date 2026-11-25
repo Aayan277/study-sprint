@@ -87,6 +87,21 @@ ok(file('pY'), 'B: Y is back in the account');
 await syncNow(A);
 ok(!(await marks(A)).gone.includes('pY'), 'A: sees the mark cleared');
 
+// (e) Recently deleted: the picture of a card in the trash is not marked, swept or removed within 30 days; after the purge it is cleaned and marked as usual.
+await setPic(A, 'sample-2', 'pT');
+await syncNow(A);
+ok(file('pT'), 'setup: pT is in the account');
+await run(A, async () => { const db = await import('./js/db.js'); const t = await import('./js/trash-lazy.js'); await t.keepDeleted(await db.deleteCards(['sample-2'])); });
+await dropOld(A, 'pT');
+await syncNow(A);
+ok(await hasMedia(A, 'pT') && !('pT' in (await marks(A)).marks) && file('pT'), 'trashed card: its picture stays on the device, is not marked and stays in the account');
+await ageMark(A, 'pT');                      // even a month-old mark (from another device) does not sweep it, and is un-marked
+await syncNow(A); await syncNow(A);
+ok(file('pT') && await hasMedia(A, 'pT') && !('pT' in (await marks(A)).marks), 'a month-old mark on it is un-marked, never swept, while the card is in Recently deleted');
+await run(A, async () => { await (await import('./js/trash.js')).list({ now: Date.now() + 31 * 86400000 }); });          // opening the list 31 days later purges the entry
+await syncNow(A);
+ok(!(await hasMedia(A, 'pT')) && 'pT' in (await marks(A)).marks && file('pT'), 'after the purge the picture is removed here and marked, as for any unused picture (the account copy goes 30 days later)');
+
 // (c) A retry of a picture the account already holds, at a full account, is done (not "account is full").
 const email = 'me@example.com';
 for (const id of ['pZ', 'pW']) {

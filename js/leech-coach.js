@@ -14,6 +14,7 @@ import { plainText } from './format.js';
 import { isPair, unpaired } from './reverse.js';
 import { partnerOf, pairsFor } from './confusion.js';
 import { savedTooBigNote } from './quota.js';
+import { keepDeleted, forgetLater } from './trash-lazy.js';
 import { MAX_PARTS, splitBack, splitCards, unleeched, parked, canSplit, withoutLeechTag, forgottenText } from './leech-logic.js';
 
 // After a card of a pair is deleted, its partner is an ordinary card again.
@@ -29,6 +30,7 @@ async function deleteWithSnapshot(card) {
   snap.cards.push(...partner);
   await unpairPartner(partner);
   db.holdMedia();
+  snap.kept = keepDeleted(snap, { before: { cards: partner } });
   return snap;
 }
 
@@ -110,7 +112,7 @@ function askDelete(row, card, done, opener) {
   yes.addEventListener('click', async () => {
     if (yes.disabled) return;
     yes.disabled = true;                                  // a double tap must not delete twice
-    try { const snap = await deleteWithSnapshot(card); done('Card deleted', undoOpts(async () => { await db.restoreSnapshot(snap); toast('Card restored'); })); } catch (err) { console.error(err); yes.disabled = false; toast("Couldn't delete the card. Try again."); }
+    try { const snap = await deleteWithSnapshot(card); done('Card deleted', undoOpts(async () => { await db.restoreSnapshot(snap); forgetLater(snap.kept); toast('Card restored'); })); } catch (err) { console.error(err); yes.disabled = false; toast("Couldn't delete the card. Try again."); }
   });
   no.focus();
   yes.scrollIntoView({ block: 'nearest' });
@@ -203,6 +205,7 @@ function openSplit(card, done) {
       closeSheet();
       done(`Split into ${made.length} cards${keep ? '. The original stays suspended.' : '.'}`, snap ? undoOpts(async () => {
         await db.restoreSnapshot(snap);                    // the original comes back with its history; the new cards go
+        forgetLater(snap.kept);
         try { await db.deleteCards(made.map(c => c.id)); } catch (err) {
           console.error(err);          // (undoOpts would say "Nothing was changed", which is no longer true here)
           toast("Card restored, but the new cards are still there. Delete them from All cards.");

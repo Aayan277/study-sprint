@@ -139,7 +139,7 @@ ok(img.startsWith(BASE) && img.endsWith('.png'), 'og:image is an absolute addres
 ok(await meta('meta[property="og:url"]') === BASE && await meta('link[rel=canonical]', 'href') === BASE, 'og:url and the canonical link point at the live site');
 ok(await meta('meta[property="og:type"]') === 'website' && (await meta('meta[property="og:title"]')).includes('Study Sprint') && (await meta('meta[property="og:description"]')).length > 40, 'og:type, og:title and og:description are there');
 ok(await meta('meta[name="twitter:card"]') === 'summary_large_image' && (await meta('meta[name="twitter:image"]')).startsWith(BASE), 'Twitter card is summary_large_image with an absolute image');
-ok(/spaced repetition/.test(await meta('meta[name=description]')) && /Works offline/.test(await meta('meta[name=description]')), 'the page description is the sharp one');
+ok(/spaced repetition/i.test(await meta('meta[name=description]')) && /works offline/i.test(await meta('meta[name=description]')), 'the page description is the sharp one');
 // the image itself (served from this folder: the same file the live address will serve)
 const og = await (await p.request.get(URL + img.slice(BASE.length))).body();
 ok(og.readUInt32BE(16) === 1200 && og.readUInt32BE(20) === 630 && og.length < 300 * 1024, 'the og image is 1200x630 and under 300 KB: ' + Math.round(og.length / 1024) + ' KB');
@@ -149,7 +149,7 @@ ok(await meta('meta[name=apple-mobile-web-app-status-bar-style]') === 'black-tra
 const png = async path => { const r = await p.request.get(URL + path); const b = await r.body(); return { ok: r.ok(), w: b.readUInt32BE(16), h: b.readUInt32BE(20), sig: b.slice(1, 4).toString() }; };
 const man = await (await p.request.get(URL + 'manifest.webmanifest')).json();
 ok(!('orientation' in man) && man.background_color === '#08090C' && man.theme_color === '#08090C', 'manifest: no orientation lock, splash colors #08090C');
-ok(man.categories.includes('education') && man.display_override.includes('standalone') && /spaced repetition/.test(man.description), 'manifest: categories, display_override and description');
+ok(man.categories.includes('education') && man.display_override.includes('standalone') && /spaced repetition/i.test(man.description), 'manifest: categories, display_override and description');
 ok(['Review', 'Play', 'Add cards'].every(n => man.shortcuts.some(s => s.short_name === n)), 'manifest: shortcuts Review, Play, Add cards');
 ok(man.screenshots.some(s => s.form_factor === 'narrow') && man.screenshots.some(s => s.form_factor === 'wide'), 'manifest: narrow and wide screenshots');
 for (const s of man.screenshots) { const r = await png(s.src); ok(r.ok && s.sizes === r.w + 'x' + r.h, 'screenshot ' + s.src + ' exists and is ' + s.sizes); }

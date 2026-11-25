@@ -68,7 +68,7 @@ function draw(el, api) {
 const DEMO = [['r1', 'Again', '1m'], ['r2', 'Hard', '6m'], ['r3', 'Good', '10m'], ['r4', 'Easy', '8d']];
 const demoHTML = () => `
   <div class="lp-card lp-back" aria-hidden="true"></div>
-  <div class="lp-card"><span class="lp-deck">Cell Biology</span><b class="lp-q">Mitochondria</b><i class="lp-line"></i><span class="lp-a">Makes ATP for the cell</span></div>
+  <div class="lp-card"><span class="lp-deck">Sample deck</span><b class="lp-q">Working memory</b><i class="lp-line"></i><span class="lp-a">Holds about 4 chunks at once</span></div>
   <div class="lp-rates" aria-hidden="true">${DEMO.map(([c, l, t]) => `<span class="${c}"><b>${l}</b>${t}</span>`).join('')}</div>`;
 
 function drawPitch(el, api) {
@@ -77,12 +77,12 @@ function drawPitch(el, api) {
       <div class="wl-top"><span class="brand">${MARK} Study Sprint</span><button class="link" type="button" id="wlSkip">Skip</button></div>
       <div class="lp-grid">
         <div class="lp-copy">
-          <h1 tabindex="-1">Remember it for the exam, not just the night before.</h1>
+          <h1 tabindex="-1">Study less. Remember more.</h1>
           <div class="lp-demo lp-phone-only">${demoHTML()}</div>
           <ul class="lp-points">
             <li>${icon('clock')}<span><b>A few minutes a day.</b> The app picks what to review.</span></li>
-            <li>${icon('calendar')}<span><b>Set your exam date.</b> Everything comes back in time.</span></li>
-            <li>${icon('bolt')}<span><b>Cram with games.</b> Timed rounds to drill any deck.</span></li>
+            <li>${icon('paste')}<span><b>Any subject.</b> Paste notes, or import Anki, Excel or PDF.</span></li>
+            <li>${icon('bolt')}<span><b>Games when you want them.</b> Timed rounds to drill a deck.</span></li>
           </ul>
           <div class="lp-cta"><button class="btn primary wide cta" type="button" id="wlNext">Get started</button></div>
           <p class="lp-free">Free · no account · works offline</p>

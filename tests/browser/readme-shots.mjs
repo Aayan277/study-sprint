@@ -1,8 +1,8 @@
-// Makes the screenshots the README and the app manifest use, from the real app (Violet Dark, with a realistic set of courses):
+// Makes the screenshots the README and the app manifest use, from the real app (Violet Dark, with a realistic set of decks):
 //   docs/screenshots/{today,review,play,stats,decks,import}.png   phone shots, 750x1624 (375x812 at 2x)
 //   docs/screenshots/desktop.png                                   a computer shot, 1440x900
 // Run it again whenever the look of the app changes:  node tests/browser/readme-shots.mjs
-// (docs/hero.png and docs/hero-light.png, the pictures at the top of the README, are designed pictures, not made here.)
+// (docs/hero.png, docs/hero-light.png and icons/og-1200x630.png are made from these shots by tests/browser/promo-images.mjs.)
 // It serves the app itself on http://localhost:8125 (change with PORT=...) and needs Playwright, like the browser tests.
 
 import http from 'node:http';
@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { realChromium as chromium } from './pw.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const OUT = path.join(ROOT, 'docs/screenshots');
+const OUT = process.env.SHOTS_OUT || path.join(ROOT, 'docs/screenshots');       // SHOTS_OUT / SHOTS_MODE=light: promo-images.mjs asks for light shots in a temp folder
+const MODE = process.env.SHOTS_MODE === 'light' ? 'light' : 'dark';
 const PORT = Number(process.env.PORT || 8125);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png' };
 const server = http.createServer((req, res) => {
@@ -31,7 +32,7 @@ const ECON = [['Opportunity cost', 'Value of the next best alternative given up'
 const SPAN = [['el perro', 'the dog'], ['la biblioteca', 'the library'], ['aprender', 'to learn'], ['el examen', 'the exam'], ['la ciudad', 'the city'], ['escribir', 'to write']];
 const NEURO = [['Neuron', 'Basic cell of the nervous system that transmits electrical and chemical signals'], ['Axon', 'Long projection that carries impulses away from the cell body'], ['Dendrite', 'Branch that receives signals from other neurons'], ['Myelin', 'Fatty insulating sheath that speeds conduction'], ['Glia', 'Support cells: astrocytes, oligodendrocytes, microglia']];
 
-// Courses with an exam coming up, some history, and a due pile: what a student three weeks in looks like.
+// A normal set of decks (one with an exam date), some history and a due pile: what someone three weeks in looks like.
 async function seed(page) {
   await page.evaluate(async ({ BIO, ECON, SPAN, NEURO }) => {
     const db = await import('./js/db.js');
@@ -41,14 +42,14 @@ async function seed(page) {
     const grow = (rows, n) => Array.from({ length: n }, (_, i) => rows[i % rows.length].map((s, k) => k === 0 && i >= rows.length ? `${s} (${Math.floor(i / rows.length) + 1})` : s));
     const mk = (deckId, rows) => rows.map(([f, b], i) => ({ id: deckId + i, deckId, front: f, back: b, tags: [], created: i }));
     const decks = [
-      [{ id: 'bio', name: 'Cell Biology', course: 'BIOL 201', color: '#46A758', created: now + 1, examDate: iso(9) }, mk('bio', grow(BIO, 60))],
-      [{ id: 'econ', name: 'Microeconomics', course: 'ECON 101', color: '#3E63DD', created: now + 2 }, mk('econ', grow(ECON, 48))],
-      [{ id: 'neuro', name: 'Neuroscience', course: 'PSYC 240', color: '#8E4EC6', created: now + 3, examDate: iso(23) }, mk('neuro', grow(NEURO, 30))],
-      [{ id: 'span', name: 'Spanish B1 Vocabulary', course: 'SPAN 210', color: '#F76B15', created: now + 4 }, mk('span', grow(SPAN, 36))]
+      [{ id: 'bio', name: 'Cell Biology', course: '', color: '#46A758', created: now + 1 }, mk('bio', grow(BIO, 60))],
+      [{ id: 'econ', name: 'Microeconomics', course: '', color: '#3E63DD', created: now + 2 }, mk('econ', grow(ECON, 48))],
+      [{ id: 'neuro', name: 'Neuroscience', course: '', color: '#8E4EC6', created: now + 3 }, mk('neuro', grow(NEURO, 30))],
+      [{ id: 'span', name: 'Spanish Vocabulary', course: '', color: '#F76B15', created: now + 4 }, mk('span', grow(SPAN, 36))]
     ];
     for (const [d, c] of decks) await db.addDeckWithCards(d, c);
     const cs = await db.getAll('cards');
-    const states = cs.filter((_, i) => i % 5 !== 4).map((c, i) => ({ cardId: c.id, due: now + ((i % 9) - 3) * DAY, stability: [1, 4, 12, 30, 60, 90][i % 6], difficulty: 3 + (i % 6), elapsedDays: 1, scheduledDays: 3, learningSteps: 0, reps: 3 + i % 4, lapses: i % 7 === 0 ? 4 : i % 3, state: i % 11 === 0 ? 1 : 2, lastReview: now - DAY }));
+    const states = cs.filter((_, i) => i % 5 !== 4).map((c, i) => ({ cardId: c.id, due: now + ((i % 9) - 1) * DAY, stability: [1, 4, 12, 30, 60, 90][i % 6], difficulty: 3 + (i % 6), elapsedDays: 1, scheduledDays: 3, learningSteps: 0, reps: 3 + i % 4, lapses: i % 7 === 0 ? 4 : i % 3, state: i % 11 === 0 ? 1 : 2, lastReview: now - DAY }));
     await db.putMany('cardStates', states);
     const logs = [];
     for (let d = 0; d < 45; d++) {
@@ -65,15 +66,15 @@ async function seed(page) {
 
 const browser = await chromium.launch();
 const shoot = async (name, w, h, scale, go) => {
-  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: scale, serviceWorkers: 'block', colorScheme: 'dark', reducedMotion: 'reduce', isMobile: w < 800, hasTouch: w < 800 });
-  await ctx.addInitScript(() => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); localStorage.setItem('study-sprint-theme', JSON.stringify({ skin: 'violet', mode: 'dark' })); } catch { /* fine */ } });
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: scale, serviceWorkers: 'block', colorScheme: MODE, reducedMotion: 'reduce', isMobile: w < 800, hasTouch: w < 800 });
+  await ctx.addInitScript(mode => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); localStorage.setItem('study-sprint-theme', JSON.stringify({ skin: 'violet', mode })); } catch { /* fine */ } }, MODE);
   const page = await ctx.newPage();
   await page.goto(URL_); await page.waitForSelector('.today-hero');
   await seed(page); await page.reload(); await page.waitForSelector('.tdeck');
   await go(page);
   await page.waitForTimeout(500);                       // let fonts and the goal ring settle
   await page.screenshot({ path: path.join(OUT, name + '.png') });
-  console.log('saved docs/screenshots/' + name + '.png', w * scale + 'x' + h * scale);
+  console.log('saved ' + path.relative(ROOT, OUT) + '/' + name + '.png', w * scale + 'x' + h * scale);
   await ctx.close();
 };
 const PHONE = [375, 812, 2];
