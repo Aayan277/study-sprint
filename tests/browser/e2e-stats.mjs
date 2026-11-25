@@ -52,6 +52,7 @@ const reviewLogs = await page.evaluate(async () => { const { daysAgoStart } = aw
 ok(shownTotal === reviewLogs, `retention counts the ${reviewLogs} Review answers, not the Play multiple choice ones: ${shownTotal}`);
 ok((await page.locator('#perDay .col').count()) === 30 && (await page.locator('#forecast .col').count()) === 7, '30-day and 7-day charts drawn');
 ok((await page.locator('#perDay .cap').count()) === 1, 'only the peak column of the 30-day chart is labeled');
+if (await page.locator('#difficulty').count()) ok((await page.locator('#difficulty .cap').count()) <= 1 && (await page.locator('#difficulty .chart-line span').count()) > 0, 'the Difficulty chart keeps its side numbers and labels only its peak');
 ok((await page.locator('#forecast .cap').count()) === (await page.locator('#forecast .col .bar').evaluateAll(b => b.filter(x => x.getBoundingClientRect().height > 0.5).length)) && (await page.locator('#forecast .chart-line span').count()) === 0, 'the 7-day chart labels each bar that has a value and drops the side numbers');
 await noHScroll('stats');
 await page.screenshot({ path: SP + '/s-top.png' });

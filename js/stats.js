@@ -413,6 +413,7 @@ export async function renderStats(el) {
       <div class="mhead"><h2>Due in the next 7 days</h2><span class="muted small">${plural(D.forecast.reduce((n, d) => n + d.count, 0), 'card')}</span></div>
       ${columnChart({
         id: 'forecast', rows: D.forecast, value: d => d.count,
+        labelled: true,
         x: (d, i) => i === 0 ? 'Today' : weekday(d.time),
         tip: (d, i) => [plural(d.count, 'card'), i === 0 ? 'Scheduled for today (before daily limits)' : `Due ${weekday(d.time)} ${shortDate(d.time)}`],
         tableHead: ['Day', 'Cards due'],
@@ -651,12 +652,11 @@ const HARD_SHOWN = 5;
 // ---------- column chart ----------
 // rows: data; value(row): bar height; x(row, i, rows): axis label ('' for none);
 // tip(row, i): [value line, detail line] for the tooltip; tableHead/tableRow: the "Show as table" view.
-function columnChart({ id, rows, value, x, tip, tableHead, tableRow, label }) {
+function columnChart({ id, rows, value, x, tip, tableHead, tableRow, label, labelled = false }) {
   const max = niceMax(Math.max(0, ...rows.map(value)));
   const peak = rows.reduce((best, r, i) => (value(r) > value(rows[best]) ? i : best), 0);
-  // A chart of 10 bars or fewer labels each bar with its value, so the side numbers are left off (the lines stay); a longer one labels
-  // only its tallest bar and keeps the top and bottom numbers.
-  const labelled = rows.length <= 10;
+  // `labelled` (the 7-day forecast): each bar shows its value, so the side numbers are left off (the lines stay); the other charts label
+  // only their tallest bar and keep the top and bottom numbers.
   const ticks = [max, 0];
   return `
     <div class="chart${labelled ? ' labelled' : ''}" id="${id}" role="group" aria-label="${esc(label)}" aria-describedby="${id}-hint">
