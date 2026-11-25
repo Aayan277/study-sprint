@@ -824,10 +824,6 @@ main[data-route="import"] > .view > .savebar{order:5}
 .rv-counts{display:flex;margin-right:auto;padding:7px 10px;border-radius:var(--r-md);background:var(--surface-1);box-shadow:var(--e-1);font:500 var(--fs-sm)/1 var(--f-num);color:var(--text-2)}
 .rv-counts::before{content:attr(data-left)}
 .rv-counts > span{display:none}
-.c-new{color:var(--easy)}
-.c-learn{color:var(--hard)}
-.c-rev{color:var(--good)}
-/* Original style: the counts are neutral; only the queue being studied right now is tinted */
 #speakBtn{display:inline-grid;place-items:center}
 #speakBtn svg{width:19px;height:19px}
 /* The toolbar: Undo, Read aloud and ⋯ are square icon buttons, End has a word */
@@ -2996,9 +2992,6 @@ main[data-route="settings"] .h-row + .set-sub{margin-top:var(--s-2)}
   html:not([data-ui="clinical"]) .rv-head .link::before{inset:-2px}
   /* with Undo there are four controls: End loses its side padding and the counts pill tightens so the row still ends at the card's edge */
   html:not([data-ui="clinical"]) .rv-head:has(#undoBtn) #endBtn{width:40px;padding:0}
-}
-@media (max-width:359px){
-  html:not([data-ui="clinical"]) .rv-head:has(#undoBtn) .rv-counts{gap:1px}
 }
 @media (max-width:599.98px){  html:not([data-ui="clinical"]) input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not(.switch),html:not([data-ui="clinical"]) select{min-height:44px}
   html:not([data-ui="clinical"]) .set-row input[type="range"]{height:44px}
