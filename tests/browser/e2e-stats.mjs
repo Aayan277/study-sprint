@@ -51,7 +51,8 @@ const reviewLogs = await page.evaluate(async () => { const { daysAgoStart } = aw
   return (await (await import('./js/db.js')).getLogsSince(since)).filter(l => l.source === 'review' && l.state === 2).length; });
 ok(shownTotal === reviewLogs, `retention counts the ${reviewLogs} Review answers, not the Play multiple choice ones: ${shownTotal}`);
 ok((await page.locator('#perDay .col').count()) === 30 && (await page.locator('#forecast .col').count()) === 7, '30-day and 7-day charts drawn');
-ok((await page.locator('#perDay .cap').count()) === 1, 'only the peak column is labeled');
+ok((await page.locator('#perDay .cap').count()) === 1, 'only the peak column of the 30-day chart is labeled');
+ok((await page.locator('#forecast .cap').count()) === (await page.locator('#forecast .col .bar').evaluateAll(b => b.filter(x => x.getBoundingClientRect().height > 0.5).length)) && (await page.locator('#forecast .chart-line span').count()) === 0, 'the 7-day chart labels each bar that has a value and drops the side numbers');
 await noHScroll('stats');
 await page.screenshot({ path: SP + '/s-top.png' });
 // the tooltip is not a second announcement (the bar's own label says it), and the arrow-key hint is linked to each chart

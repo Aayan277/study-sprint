@@ -1307,6 +1307,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .col:last-child .bar{background:var(--accent)}
 @media (hover:hover) and (pointer:fine){.col:hover .bar{background:var(--accent)}}
 .cap{position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font:500 .625rem var(--f-num);color:var(--text-2);white-space:nowrap}
+.chart.labelled .chart-plot,.chart.labelled .chart-x{margin-left:0}
 .chart-x{display:flex;gap:0;margin:6px 0 0 26px;font:.625rem var(--f-num);color:var(--text-2)}
 /* Each label is centered under its column; the first and last are pinned to the chart's edges so they never stick out. */
 .chart-x span{flex:1;min-width:0;display:flex;justify-content:center;white-space:nowrap}
@@ -3476,3 +3477,6 @@ main h2[tabindex="-1"]{outline:none}
 .fin-missed{display:flex;align-items:center;gap:var(--s-3);margin:var(--s-3) 0 0;font-size:var(--fs-sm);color:var(--text-2)}
 .fin-missed b{color:var(--text);font-weight:600}
 .fin-line{margin:0;font:600 var(--fs-md) var(--f-ui);color:var(--text)}
+
+/* "Show as table" stays (it is the accessible way to read a chart) but sits quietly under it */
+.chart-table > summary{color:var(--text-2);font-size:var(--fs-xs);font-weight:500}

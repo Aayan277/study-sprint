@@ -654,17 +654,20 @@ const HARD_SHOWN = 5;
 function columnChart({ id, rows, value, x, tip, tableHead, tableRow, label }) {
   const max = niceMax(Math.max(0, ...rows.map(value)));
   const peak = rows.reduce((best, r, i) => (value(r) > value(rows[best]) ? i : best), 0);
-  const ticks = Number.isInteger(max / 2) ? [max, max / 2, 0] : [max, 0];   // counts are whole numbers, so no "2.5" line
+  // A chart of 10 bars or fewer labels each bar with its value, so the side numbers are left off (the lines stay); a longer one labels
+  // only its tallest bar and keeps the top and bottom numbers.
+  const labelled = rows.length <= 10;
+  const ticks = [max, 0];
   return `
-    <div class="chart" id="${id}" role="group" aria-label="${esc(label)}" aria-describedby="${id}-hint">
+    <div class="chart${labelled ? ' labelled' : ''}" id="${id}" role="group" aria-label="${esc(label)}" aria-describedby="${id}-hint">
       <span class="sr-only" id="${id}-hint">Use the arrow keys to move between bars</span>
       <div class="chart-plot">
-        ${ticks.map(t => `<div class="chart-line" style="bottom:${(t / max) * 100}%"><span class="mono">${t.toLocaleString()}</span></div>`).join('')}
+        ${ticks.map(t => `<div class="chart-line" style="bottom:${(t / max) * 100}%">${labelled ? '' : `<span class="mono">${t.toLocaleString()}</span>`}</div>`).join('')}
         <div class="chart-cols">${rows.map((r, i) => {
           const v = value(r);
           const [main, detail] = tip(r, i);
           return `<button type="button" class="col" data-tip="${esc(main)}" data-detail="${esc(detail)}" aria-label="${esc(`${detail}: ${main}`)}">
-            <span class="bar" style="height:${(v / max) * 100}%">${i === peak && v > 0 ? `<span class="cap mono">${v.toLocaleString()}</span>` : ''}</span></button>`;
+            <span class="bar" style="height:${(v / max) * 100}%">${(labelled ? v > 0 : i === peak && v > 0) ? `<span class="cap mono">${v.toLocaleString()}</span>` : ''}</span></button>`;
         }).join('')}</div>
       </div>
       <div class="chart-x" aria-hidden="true">${rows.map((r, i) => `<span>${esc(x(r, i, rows))}</span>`).join('')}</div>
